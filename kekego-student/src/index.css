@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+/* Class-strategy dark mode: toggle `dark` on <html>. */
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-charcoal: #121212;
+
+  --color-brand-50: #e6fff3;
+  --color-brand-100: #d0fbe6;
+  --color-brand-200: #a5f5cd;
+  --color-brand-300: #6cebaa;
+  --color-brand-400: #2ce68a;
+  --color-brand-500: #00e676;
+  --color-brand-600: #00c96a;
+  --color-brand-700: #00a455;
+  --color-brand-800: #007a3f;
+  --color-brand-900: #005a2f;
+  --color-brand-950: #04351c;
+
+  --color-ink-50: #f8fafc;
+  --color-ink-100: #f1f5f9;
+  --color-ink-200: #e2e8f0;
+  --color-ink-300: #cbd5e1;
+  --color-ink-400: #94a3b8;
+  --color-ink-500: #64748b;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-800: #1e293b;
+  --color-ink-900: #0f172a;
+
+  --color-keke-100: #fef3c7;
+  --color-keke-200: #fde68a;
+  --color-keke-300: #fcd34d;
+  --color-keke-400: #fbbf24;
+  --color-keke-500: #f59e0b;
+  --color-keke-600: #d97706;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-ink-50 font-sans text-ink-900 antialiased dark:bg-charcoal dark:text-slate-100;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Hide scrollbars inside the mobile scroll region while keeping native
+     scrolling; desktop keeps styled scrollbars (see @media below). */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  @keyframes keke-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  .animate-keke-float {
+    animation: keke-float 5s ease-in-out infinite;
+  }
+
+  @keyframes keke-step {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-keke-step {
+    animation: keke-step 0.35s ease-out both;
+  }
+}
+
+/* Slim, themed scrollbars for desktop scrolling regions. */
+@media (min-width: 1024px) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background: rgba(100, 116, 139, 0.35);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.55);
+    background-clip: content-box;
+  }
+}
