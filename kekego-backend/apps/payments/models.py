@@ -1,0 +1,1 @@
+"""Placeholder module - payment/wallet models will be added later."""

@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.python-version
+
+# Environment / secrets - NEVER commit
+.env
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/collectstatic/
+staticfiles/
+
+# Test / coverage / lint
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.tox/
+.mypy_cache/
+.coverage.*
+*.cover
+.hypothesis/
+.cache/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
