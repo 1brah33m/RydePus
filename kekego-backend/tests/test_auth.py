@@ -118,6 +118,43 @@ def test_me_returns_current_user(student_client):
 
 
 @pytest.mark.django_db
+def test_me_updates_profile(student_client):
+    response = student_client.patch(
+        ME_URL,
+        {"first_name": "Ada", "last_name": "Updated", "phone_number": "+2348000000000"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["first_name"] == "Ada"
+    assert body["last_name"] == "Updated"
+    assert body["phone_number"] == "+2348000000000"
+
+
+@pytest.mark.django_db
+def test_change_password_success(student_client, student_user):
+    response = student_client.post(
+        "/api/v1/auth/change-password/",
+        {"old_password": "StrongPass123!", "new_password": "NewStrongPass456!"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    student_user.refresh_from_db()
+    assert student_user.check_password("NewStrongPass456!")
+
+
+@pytest.mark.django_db
+def test_change_password_rejects_wrong_old_password(student_client):
+    response = student_client.post(
+        "/api/v1/auth/change-password/",
+        {"old_password": "wrong-password", "new_password": "NewStrongPass456!"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["error"]["code"] == "INVALID"
+
+
+@pytest.mark.django_db
 def test_me_requires_authentication(api_client):
     response = api_client.get(ME_URL)
     assert response.status_code == status.HTTP_401_UNAUTHORIZED

@@ -1,3 +1,4 @@
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from apps.users.models import User
@@ -16,6 +17,35 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ("id", "email", "phone_number", "first_name", "last_name", "full_name", "role", "created_at")
         read_only_fields = ("id", "role", "created_at")
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """Update editable profile fields for the current authenticated user."""
+
+    class Meta:
+        model = User
+        fields = ("first_name", "last_name", "phone_number")
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Validate current-password and new-password updates for the authenticated user."""
+
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, required=True, min_length=8)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if not user.check_password(attrs["old_password"]):
+            raise serializers.ValidationError({"old_password": "The old password is incorrect."})
+
+        validate_password(attrs["new_password"], user=user)
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return user
 
 
 class RegisterSerializer(serializers.Serializer):

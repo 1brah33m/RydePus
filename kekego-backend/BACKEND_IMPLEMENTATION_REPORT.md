@@ -1,0 +1,381 @@
+# TransitX Backend Implementation Report
+
+**Project:** TransitX / KekeGo Backend  
+**Framework:** Django 5.x and Django REST Framework  
+**Report date:** 2026-09-20
+
+## 1. Executive Summary
+
+The TransitX backend is implemented as a modular Django monolith for a student transportation platform. It provides authentication, role-based access, driver availability, ride groups, trip lifecycle management, payment records and buyout payment intents, and notifications.
+
+The backend is currently suitable as a tested MVP foundation. It is not yet production-complete because real payment-provider processing, route-specific driver matching, frontend contract alignment, operational hardening, and production deployment validation remain outstanding.
+
+The latest relevant backend validation completed successfully with **46 tests passing**.
+
+## 2. Architecture
+
+The project is organized into domain-focused Django applications:
+
+- `apps.users`: custom email-based user accounts, roles, authentication, serializers, tokens, and permissions.
+- `apps.drivers`: driver profiles and availability state.
+- `apps.groups`: student ride groups and memberships.
+- `apps.trips`: trip creation, driver discovery, assignment, status transitions, and student cancellation.
+- `apps.payments`: completed-trip payments and group buyout payment intents.
+- `apps.notifications`: notification records, notification tasks, and read-state endpoints.
+- `config`: settings, URL registration, health checks, error handlers, Celery, logging, and API documentation.
+
+Production infrastructure is designed around PostgreSQL, Redis, and Celery. Development and tests can use SQLite fallback configuration.
+
+## 3. Authentication and Authorization
+
+The backend uses a custom `User` model with email as the username field.
+
+Supported roles:
+
+- `STUDENT`
+- `DRIVER`
+
+Implemented authentication features:
+
+- User registration
+- Email/password login
+- JWT access and refresh tokens
+- Authenticated current-user profile retrieval
+- Profile updates
+- Password changes
+- Role-based permission classes
+- Shared JSON error handling for authentication and permission failures
+
+Main endpoints:
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/v1/auth/register/` | Public | Register a student or driver |
+| `POST` | `/api/v1/auth/login/` | Public | Obtain JWT tokens |
+| `POST` | `/api/v1/auth/refresh/` | Refresh token | Refresh an access token |
+| `GET` | `/api/v1/auth/me/` | Authenticated | Retrieve the current user |
+| `PATCH` | `/api/v1/auth/me/` | Authenticated | Update profile fields |
+| `POST` | `/api/v1/auth/change-password/` | Authenticated | Change password |
+
+## 4. Drivers Module
+
+Implemented features:
+
+- Driver profile creation on first driver profile request
+- Driver-only profile endpoint
+- Driver availability states:
+  - `OFFLINE`
+  - `ONLINE`
+  - `BUSY`
+- Availability updates
+- Online-driver trip discovery
+- Atomic trip acceptance
+- Driver state changes to `BUSY` after accepting a trip
+
+Endpoints:
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/drivers/me/` | Driver | Retrieve the driver profile |
+| `PATCH` | `/api/v1/drivers/availability/` | Driver | Change availability |
+| `GET` | `/api/v1/trips/available/` | Online driver | List pending unassigned trips |
+| `POST` | `/api/v1/trips/{id}/accept/` | Online driver | Claim a pending trip |
+
+Trip acceptance uses a database transaction and row locking so two drivers cannot successfully claim the same pending trip.
+
+Route-specific driver matching is not yet implemented. Drivers currently discover all pending trips rather than receiving route-filtered matches.
+
+## 5. Groups Module
+
+Implemented features:
+
+- Student-only group creation
+- Automatic creator membership
+- Group listing
+- Student membership joining
+- Duplicate membership prevention
+- Capacity validation
+- Member leave flow
+- Creator cancellation flow
+- Committed-trip protection
+- Group buyout payment-intent creation
+
+Endpoints:
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/groups/` | Student | List groups |
+| `POST` | `/api/v1/groups/` | Student | Create a group |
+| `POST` | `/api/v1/groups/{id}/join/` | Student | Join a group |
+| `POST` | `/api/v1/groups/{id}/leave/` | Student member | Leave an uncommitted group |
+| `POST` | `/api/v1/groups/{id}/cancel/` | Group creator | Cancel an uncommitted group |
+| `POST` | `/api/v1/groups/{id}/buyout/` | Student member | Create a pending buyout payment intent |
+
+Group behavior:
+
+- The creator is automatically added as the first member.
+- A group cannot exceed its configured capacity.
+- A member cannot leave after a trip is accepted, started, or completed.
+- A creator cannot cancel after a trip is committed.
+- The last member leaving removes the empty group.
+- Cancelling a group cancels pending related trips before deleting the group.
+
+The current group model represents locations as strings and does not yet expose the richer member, status, group-code, or seat metadata expected by the frontend.
+
+## 6. Trips Module
+
+Implemented trip statuses:
+
+- `PENDING`
+- `ACCEPTED`
+- `IN_PROGRESS`
+- `COMPLETED`
+- `CANCELLED`
+
+Implemented features:
+
+- Student trip creation from a group membership
+- Student-owned trip listing
+- Driver pending-trip discovery
+- Driver trip acceptance
+- Driver start, completion, and cancellation transitions
+- Student cancellation of the student's own pending trip
+- Ownership checks
+- Transition validation
+- Transactional cancellation and acceptance paths
+
+Endpoints:
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/trips/` | Student | List trips created by the student |
+| `POST` | `/api/v1/trips/` | Student | Create a trip |
+| `GET` | `/api/v1/trips/available/` | Online driver | Discover pending trips |
+| `POST` | `/api/v1/trips/{id}/accept/` | Online driver | Accept a trip |
+| `POST` | `/api/v1/trips/{id}/cancel/` | Trip-owning student | Cancel a pending trip |
+| `POST` | `/api/v1/trips/{id}/start/` | Assigned driver | Start a trip |
+| `POST` | `/api/v1/trips/{id}/complete/` | Assigned driver | Complete a trip |
+| `POST` | `/api/v1/trips/{id}/cancel/` | Assigned driver | Cancel an assigned trip |
+
+The same cancel URL is role-sensitive: the student endpoint handles a student-owned pending trip, while the driver status endpoint handles an assigned driver's permitted cancellation transition.
+
+Trip ratings are not yet implemented. There is no rating model, serializer, or rating endpoint.
+
+## 7. Payments Module
+
+Implemented payment types:
+
+- `TRIP`
+- `GROUP_BUYOUT`
+
+Implemented payment statuses:
+
+- `PENDING`
+- `SUCCESSFUL`
+- `FAILED`
+
+Implemented features:
+
+- Payment records for completed trips
+- Payment ownership validation
+- Completed-trip requirement
+- Amount validation against the trip fare
+- Duplicate active-payment protection
+- Group-linked buyout payment intents
+- Seat and capacity validation for buyout intents
+- Duplicate active buyout-intent protection
+- Database constraint requiring each payment to target exactly one trip or one group
+
+Endpoints:
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/payments/` | Student | List the student's payments |
+| `POST` | `/api/v1/payments/` | Student | Create a completed-trip payment record |
+| `POST` | `/api/v1/groups/{id}/buyout/` | Student member | Create a pending group-buyout payment intent |
+
+The payment system is not connected to Paystack, Flutterwave, Stripe, or another payment provider. Buyout requests remain `PENDING`; the group is not marked funded until a future provider-confirmation workflow is implemented.
+
+Payment references, webhook verification, provider callbacks, refunds, and idempotency keys are not yet implemented.
+
+## 8. Notifications Module
+
+Implemented features:
+
+- Notification persistence per user
+- Notification types:
+  - `SYSTEM`
+  - `TRIP_UPDATE`
+  - `PAYMENT`
+  - `GROUP`
+- Celery notification creation task
+- Student notification listing
+- Mark-as-read behavior
+- Ownership protection when reading notifications
+
+Endpoints:
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/notifications/` | Student | List the student's notifications |
+| `PATCH` | `/api/v1/notifications/{id}/read/` | Student | Mark a notification as read |
+
+Driver notification access and notification triggers for trip, payment, group, and availability events still need to be completed.
+
+## 9. Shared Platform Features
+
+Implemented platform features include:
+
+- API versioning under `/api/v1/`
+- Health endpoint with database connectivity check
+- JSON responses for Django-level 404, 403, and 500 errors
+- OpenAPI schema endpoint
+- Swagger UI
+- Redoc documentation
+- Configurable Celery and Redis settings
+- Environment-based Django settings
+- Pytest and pytest-django test configuration
+- Database migrations for implemented models
+
+Shared endpoints:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/health/` | Database-backed health check |
+| `GET` | `/api/schema/` | OpenAPI schema |
+| `GET` | `/api/docs/` | Swagger UI |
+| `GET` | `/api/redoc/` | Redoc UI |
+
+## 10. Database and Migrations
+
+Implemented models include:
+
+- `User`
+- `DriverProfile`
+- `Group`
+- `GroupMember`
+- `Trip`
+- `Payment`
+- `Notification`
+
+Migrations have been created and applied for the application models, including the payment extension for group buyout intents.
+
+The current payment schema supports either a trip target or a group target, but never both, through a database check constraint.
+
+## 11. Testing and Validation
+
+The relevant backend suite currently contains **46 passing tests** covering:
+
+- Health and API error behavior
+- Registration, login, JWT authentication, profile, and password flows
+- Student and driver role permissions
+- Driver profile and availability
+- Driver pending-trip discovery
+- Atomic trip acceptance
+- Trip status transitions
+- Student trip cancellation
+- Group creation and joining
+- Group leave and cancellation
+- Group buyout payment intents
+- Completed-trip payment validation
+- Payment amount validation
+- Duplicate active payment protection
+- Notification listing and read behavior
+
+Latest full-suite command:
+
+```powershell
+$env:DJANGO_SECRET_KEY = "dev-secret-key-for-testing"
+$env:DJANGO_DEBUG = "True"
+$env:DJANGO_ALLOWED_HOSTS = "localhost,127.0.0.1,testserver"
+py -m pytest tests/test_api.py tests/test_auth.py tests/test_permissions.py tests/test_groups.py tests/test_trips.py tests/test_payments.py tests/test_notifications.py -q
+```
+
+Latest result:
+
+```text
+46 passed
+```
+
+## 12. Frontend Integration Status
+
+The frontend currently uses a local mock backend and frontend-specific domain types. It is not yet connected to the Django API.
+
+The main data-shape differences are:
+
+- Frontend roles use lowercase values; backend roles use uppercase values.
+- Frontend users use `fullName` and `phone`; backend users use first/last names and `phone_number`.
+- Frontend locations are `{ id, name }` objects; backend locations are strings.
+- Frontend groups include members, seat counts, status, and group codes; backend groups currently expose capacity and `member_count`.
+- Frontend trips use a different lifecycle vocabulary and expect driver details and ratings.
+- Frontend payments expect provider references, methods, seats, and success/failure results; backend currently exposes database payment records.
+
+An endpoint mapping is documented in [API_FRONTEND_MAPPING.md](API_FRONTEND_MAPPING.md). The frontend integration layer should be created only after the remaining backend contracts are finalized.
+
+## 13. Remaining Production Gaps
+
+The following work remains:
+
+### Domain features
+
+- Route-specific driver matching
+- Driver request filtering by route and vehicle/availability criteria
+- Trip ratings and comments
+- Real payment-provider integration
+- Provider webhook verification
+- Payment references and refunds
+- Buyout confirmation that marks a group funded and creates/dispatches its trip
+- Driver notification access and event triggers
+- Frontend/backend response-shape alignment
+
+### Reliability and security
+
+- Pagination for groups, trips, payments, and notifications
+- Rate limiting for authentication, joins, trip acceptance, and payment operations
+- Request idempotency keys
+- Audit logging for authentication, trip state changes, group membership, and payments
+- Stronger duplicate and concurrency rules across all write workflows
+- Consistent error-envelope handling for all serializer validation errors
+- Token revocation or blacklist-backed logout
+
+### Production operations
+
+- Full PostgreSQL deployment validation
+- Redis connectivity validation
+- Celery worker and beat validation
+- HTTPS and secure-cookie configuration
+- Production secret management and rotation
+- Structured production logging
+- Error monitoring and alerting
+- Metrics and tracing
+- Backups and restore testing
+- Deployment and rollback verification
+- Load and concurrency testing
+
+## 14. Current Readiness Assessment
+
+| Area | Status |
+| --- | --- |
+| Django application foundation | Complete for MVP |
+| Authentication and roles | Implemented and tested |
+| Group and trip core flows | Implemented and tested |
+| Driver discovery and basic assignment | Implemented and tested |
+| Student cancellation | Implemented and tested |
+| Group leave/cancellation | Implemented and tested |
+| Buyout payment intent | Implemented and tested |
+| Real payments | Not complete |
+| Ratings | Not implemented |
+| Frontend integration | Not complete |
+| Production hardening | Not complete |
+| Production deployment readiness | Not complete |
+
+## 15. Recommended Next Order
+
+1. Implement trip ratings and comments.
+2. Add route-specific driver matching and driver request filtering.
+3. Integrate a real payment provider with verified webhooks.
+4. Add buyout confirmation and funded-group dispatch.
+5. Align frontend and backend data contracts.
+6. Add pagination, rate limiting, audit logging, and idempotency.
+7. Validate PostgreSQL, Redis, Celery, HTTPS, secrets, monitoring, backups, and deployment rollback.
+8. Replace the frontend mock services with the real HTTP integration layer.

@@ -5,7 +5,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.users.authentication import BearerHeaderAuthenticator
-from apps.users.serializers import RegisterSerializer, UserSerializer
+from apps.users.serializers import (
+    ChangePasswordSerializer,
+    RegisterSerializer,
+    UserProfileUpdateSerializer,
+    UserSerializer,
+)
 from apps.users.tokens import get_tokens_for_user
 
 
@@ -46,5 +51,25 @@ class LoginView(APIView):
 class MeView(APIView):
     """GET /api/v1/auth/me/ - return the currently authenticated user."""
 
+    permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = UserProfileUpdateSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UserSerializer(request.user).data)
+
+
+class ChangePasswordView(APIView):
+    """POST /api/v1/auth/change-password/ - update a signed-in user's password."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Password changed successfully."})

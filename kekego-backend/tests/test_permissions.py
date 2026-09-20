@@ -43,6 +43,25 @@ def test_role_gated_endpoint_rejects_unauthenticated(api_client):
 
 
 @pytest.mark.django_db
+def test_driver_profile_is_created_for_driver(driver_client, driver_user):
+    response = driver_client.get(DRIVER_ME_URL)
+    assert response.status_code == 200
+    assert response.json()["role"] == User.Role.DRIVER
+    assert response.json()["availability_status"] == "OFFLINE"
+
+
+@pytest.mark.django_db
+def test_driver_can_update_availability(driver_client, driver_user):
+    response = driver_client.patch(
+        "/api/v1/drivers/availability/",
+        {"availability_status": "ONLINE"},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["availability_status"] == "ONLINE"
+
+
+@pytest.mark.django_db
 def test_permission_classes_work_directly(driver_user):
     from apps.users.permissions import IsDriver, IsStudent
     from rest_framework.test import APIRequestFactory
