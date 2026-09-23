@@ -34,7 +34,7 @@ export function DriverBottomNav() {
                   <span className="flex flex-col items-center">
                     <tab.icon
                       aria-hidden
-                      className={cn('size-5', isActive && 'drop-shadow-[0_0_8px_rgba(0,230,118,0.5)]')}
+                      className={cn('size-5', isActive && 'drop-shadow-[0_0_8px_rgba(30,58,138,0.6)]')}
                       strokeWidth={isActive ? 2.2 : 1.8}
                     />
                     <span

@@ -256,20 +256,20 @@ function SearchingForDriver({
           className={cn(
             'mt-1 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold',
             fullyFunded
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30'
-              : 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30',
+              ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30'
+              : 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30',
           )}
         >
           <span
             className={cn(
               'size-1.5 animate-pulse rounded-full',
-              fullyFunded ? 'bg-emerald-500' : 'bg-violet-500',
+              fullyFunded ? 'bg-brand-500' : 'bg-brand-500',
             )}
           />
           {fullyFunded ? 'INSTANT DEPARTURE · FULLY FUNDED' : 'SEARCHING FOR DRIVER'}
         </p>
         {fullyFunded && (
-          <p className="mt-3 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm leading-relaxed text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">
+          <p className="mt-3 rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm leading-relaxed text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
             A driver has been notified of this fully-funded ride for instant pickup.
           </p>
         )}
@@ -328,18 +328,18 @@ function BuyoutCard({
   const total = waiting * FARE_PER_SEAT
 
   return (
-    <div className="mt-3 overflow-hidden rounded-2xl border border-emerald-300/70 bg-gradient-to-br from-emerald-50 to-teal-50 p-4 dark:border-emerald-500/30 dark:from-emerald-500/15 dark:to-teal-500/10">
+    <div className="mt-3 overflow-hidden rounded-2xl border border-brand-300/70 bg-gradient-to-br from-brand-50 to-brand-100 p-4 dark:border-brand-500/30 dark:from-brand-500/15 dark:to-brand-500/10">
       <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white">
           <Zap aria-hidden className="size-4.5" />
         </span>
         <div className="min-w-0">
-          <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
+          <h3 className="text-sm font-bold text-brand-900 dark:text-brand-200">
             Skip the wait and depart now!
           </h3>
-          <p className="mt-1 text-sm leading-relaxed text-emerald-800/80 dark:text-emerald-200/80">
+          <p className="mt-1 text-sm leading-relaxed text-brand-800/80 dark:text-brand-200/80">
             {waiting} empty seat{waiting === 1 ? '' : 's'} × {formatCurrency(FARE_PER_SEAT)} ={' '}
-            <strong className="text-emerald-900 dark:text-emerald-100">{formatCurrency(total)}</strong>.
+            <strong className="text-brand-900 dark:text-brand-100">{formatCurrency(total)}</strong>.
             Pay for the remaining {waiting} seat{waiting === 1 ? '' : 's'} ({formatCurrency(total)}) so your Keke
             leaves immediately.
           </p>
@@ -353,7 +353,7 @@ function BuyoutCard({
         loading={busy}
         onClick={onBuyout}
         disabled={busy}
-        className="mt-3.5 bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+        className="mt-3.5 bg-brand-500 hover:bg-brand-600 dark:bg-brand-500 dark:hover:bg-brand-400"
       >
         <Zap aria-hidden className="size-4" />
         {busy ? 'Filling remaining seats…' : 'Pay for Remaining Seats & Depart Now'}

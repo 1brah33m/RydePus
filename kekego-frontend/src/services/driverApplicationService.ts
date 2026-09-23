@@ -1,6 +1,6 @@
 import type { DriverApplication, DriverRegistrationPayload } from '../types'
 
-const APPLICATIONS_KEY = 'kekego.driver.applications.v1'
+const APPLICATIONS_KEY = 'rydepus.driver.applications.v1'
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 export type Theme = 'light' | 'dark'
 
-export const THEME_STORAGE_KEY = 'kekego.theme.v1'
+export const THEME_STORAGE_KEY = 'rydepus.theme.v1'
 
 interface ThemeContextValue {
   theme: Theme
@@ -26,7 +26,7 @@ function readStoredTheme(): Theme {
 function applyThemeClass(theme: Theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark')
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', theme === 'dark' ? '#121212' : '#f8fafc')
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#000000' : '#DBEAFE')
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

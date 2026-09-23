@@ -34,7 +34,7 @@ function Landing() {
   if (status === 'loading' || status === 'idle') {
     return (
       <div className="flex min-h-full items-center justify-center bg-charcoal">
-        <Spinner size="lg" label="Loading KekeGo" className="text-white" />
+        <Spinner size="lg" label="Loading Rydepus" className="text-white" />
       </div>
     )
   }
@@ -50,7 +50,7 @@ function Protected({ children }: { children: ReactNode }) {
   if (status === 'loading' || status === 'idle') {
     return (
       <div className="flex min-h-full items-center justify-center bg-ink-50 dark:bg-charcoal">
-        <Spinner size="lg" label="Loading KekeGo" className="text-ink-900 dark:text-slate-100" />
+        <Spinner size="lg" label="Loading Rydepus" className="text-ink-900 dark:text-slate-100" />
       </div>
     )
   }
@@ -69,7 +69,7 @@ function DriverProtected({ children }: { children: ReactNode }) {
   if (status === 'loading' || status === 'idle') {
     return (
       <div className="flex min-h-full items-center justify-center bg-charcoal">
-        <Spinner size="lg" label="Loading KekeGo" className="text-white" />
+        <Spinner size="lg" label="Loading Rydepus" className="text-white" />
       </div>
     )
   }
@@ -87,7 +87,7 @@ function GuestOnly({ children }: { children: ReactNode }) {
   if (status === 'loading' || status === 'idle') {
     return (
       <div className="flex min-h-full items-center justify-center bg-ink-50 dark:bg-charcoal">
-        <Spinner size="lg" label="Loading KekeGo" className="text-ink-900 dark:text-slate-100" />
+        <Spinner size="lg" label="Loading Rydepus" className="text-ink-900 dark:text-slate-100" />
       </div>
     )
   }

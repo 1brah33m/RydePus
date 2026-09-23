@@ -55,7 +55,7 @@ export function DriverHome() {
         {/* Greeting + status toggle */}
         <header className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-slate-400">KekeGo Driver</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-slate-400">Rydepus Driver</p>
             <h1 className="mt-0.5 truncate text-xl font-bold tracking-tight">
               Welcome back, {DRIVER.name.split(' ')[0]}
             </h1>
@@ -167,7 +167,7 @@ export function DriverHome() {
           </div>
         </section>
 
-        <p className="pb-2 text-center text-xs text-ink-400 dark:text-slate-500">KekeGo · Campus Shuttle (MVP)</p>
+        <p className="pb-2 text-center text-xs text-ink-400 dark:text-slate-500">Rydepus · Campus Shuttle (MVP)</p>
       </div>
     </DriverShell>
   )
@@ -185,7 +185,7 @@ function UrgentDispatchBanner({
   return (
     <section
       aria-label="Urgent fully-funded ride"
-      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-500 to-violet-700 p-5 text-white shadow-[0_12px_40px_rgba(124,93,250,0.4)]"
+      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-5 text-white shadow-[0_12px_40px_rgba(30,58,138,0.4)]"
     >
       <span aria-hidden className="absolute -right-10 -top-10 size-40 rounded-full bg-white/15 blur-2xl" />
 
@@ -196,7 +196,7 @@ function UrgentDispatchBanner({
           </span>
           <div>
             <p className="text-sm font-bold leading-tight">Fully-funded ride ready</p>
-            <p className="text-xs text-violet-100">
+            <p className="text-xs text-brand-100">
               {count === 1 ? '1 priority dispatch' : `${count} priority dispatches`} · depart now
             </p>
           </div>
@@ -204,7 +204,7 @@ function UrgentDispatchBanner({
         <button
           type="button"
           onClick={onOpenQueue}
-          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-bold text-violet-700 transition-transform active:scale-[0.98]"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-bold text-brand-700 transition-transform active:scale-[0.98]"
         >
           Open queue
           <ChevronRight aria-hidden className="size-4" />
@@ -216,7 +216,7 @@ function UrgentDispatchBanner({
         <span className="mx-1.5" aria-hidden>→</span>
         {dispatch.destination.name}
       </p>
-      <p className="relative mt-1 text-sm text-violet-100">
+      <p className="relative mt-1 text-sm text-brand-100">
         {dispatch.seats}/{MAX_GROUP_SIZE} seats · {formatCurrency(dispatch.fare)} fare, paid &amp; ready
       </p>
     </section>
@@ -239,7 +239,7 @@ function RideRequestCard({
   return (
     <section
       aria-label="New ride request"
-      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 p-5 text-charcoal shadow-[0_12px_40px_rgba(0,230,118,0.35)]"
+      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 p-5 text-white shadow-[0_12px_40px_rgba(30,58,138,0.4)]"
     >
       <span aria-hidden className="absolute -right-10 -top-10 size-40 rounded-full bg-white/15 blur-2xl" />
 
@@ -262,7 +262,7 @@ function RideRequestCard({
           <Users aria-hidden className="size-4" />
           {MAX_GROUP_SIZE} passengers
         </span>
-        <span aria-hidden className="text-charcoal/40">•</span>
+        <span aria-hidden className="text-white/60">•</span>
         <span className="inline-flex items-center gap-1">
           <Navigation aria-hidden className="size-4" />
           2.4 km away
@@ -289,7 +289,7 @@ function RideRequestCard({
           <button
             type="button"
             onClick={onViewRequests}
-            className="inline-flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-charcoal backdrop-blur-sm transition-transform active:scale-[0.98]"
+            className="inline-flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-sm transition-transform active:scale-[0.98]"
             aria-label="View all requests"
           >
             <BellRing aria-hidden className="size-5" />
@@ -339,7 +339,7 @@ function OfflineCard({ onGoOnline }: { onGoOnline: () => void }) {
       <button
         type="button"
         onClick={onGoOnline}
-        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-sm font-bold text-charcoal transition-transform active:scale-[0.98]"
+        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98]"
       >
         <Power aria-hidden className="size-4" />
         Go Online

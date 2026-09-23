@@ -6,8 +6,8 @@ type Tone = 'success' | 'error' | 'info' | 'error-dark'
 
 const styles: Record<Tone, { box: string; icon: string }> = {
   success: {
-    box: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300',
-    icon: 'text-emerald-600 dark:text-emerald-400',
+    box: 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-400/30 dark:bg-brand-500/10 dark:text-brand-300',
+    icon: 'text-brand-600 dark:text-brand-400',
   },
   error: {
     box: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300',

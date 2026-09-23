@@ -33,13 +33,13 @@ export function getLocation(id: string): CampusLocation {
 
 /** Demo account so the app can be opened and explored instantly. */
 export const DEMO_ACCOUNT = {
-  email: 'demo@kekego.app',
+  email: 'demo@rydepus.app',
   password: 'password123',
 }
 
 /** Demo driver account so the driver dashboard is reachable via login. */
 export const DEMO_DRIVER_ACCOUNT = {
-  email: 'driver@kekego.app',
+  email: 'driver@rydepus.app',
   password: 'password123',
 }
 
@@ -51,7 +51,7 @@ export const MOCK_STUDENTS: Student[] = [
     faculty: 'Engineering',
     level: '300',
     phone: '08123455600',
-    email: 'demo@kekego.app',
+    email: 'demo@rydepus.app',
   },
   {
     id: 'st-aisha',

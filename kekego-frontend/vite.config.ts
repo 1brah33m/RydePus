@@ -13,11 +13,11 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ['pwa/icon-192.png', 'pwa/icon-512.png', 'pwa/icon-maskable-512.png', 'pwa/apple-touch-icon.png'],
       manifest: {
-        name: 'KekeGo - Campus Shuttle & Rides',
-        short_name: 'KekeGo',
+        name: 'Rydepus - Campus Shuttle & Rides',
+        short_name: 'Rydepus',
         description: 'Uber-inspired campus transportation and ride-sharing for students and drivers.',
-        theme_color: '#121212',
-        background_color: '#F8FAFC',
+        theme_color: '#000000',
+        background_color: '#DBEAFE',
         display: 'standalone',
         start_url: '/',
         scope: '/',
@@ -51,7 +51,7 @@ export default defineConfig({
             urlPattern: ({ url }) => url.pathname.startsWith('/pwa/'),
             handler: 'CacheFirst',
             options: {
-              cacheName: 'kekego-icons',
+              cacheName: 'rydepus-icons',
               expiration: {
                 maxEntries: 10,
                 maxAgeSeconds: 60 * 60 * 24 * 30,

@@ -19,11 +19,11 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div className="flex min-h-full w-full">
       <DesktopSidebar
-        brand="KekeGo"
+        brand="Rydepus"
         items={ITEMS}
         profileTo="/profile"
         profileLabel="Profile"
-        footer="KekeGo · Campus Shuttle (MVP)"
+        footer="Rydepus · Campus Shuttle (MVP)"
       />
       <main className="relative min-h-full min-w-0 flex-1 bg-ink-50 pb-24 safe-top dark:bg-charcoal lg:pb-12">
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">{children}</div>

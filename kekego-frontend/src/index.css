@@ -4,30 +4,35 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-charcoal: #121212;
+  /* Dark surfaces / high-contrast details. Spec: pure black in dark mode. */
+  --color-charcoal: #000000;
 
-  --color-brand-50: #e6fff3;
-  --color-brand-100: #d0fbe6;
-  --color-brand-200: #a5f5cd;
-  --color-brand-300: #6cebaa;
-  --color-brand-400: #2ce68a;
-  --color-brand-500: #00e676;
-  --color-brand-600: #00c96a;
-  --color-brand-700: #00a455;
-  --color-brand-800: #007a3f;
-  --color-brand-900: #005a2f;
-  --color-brand-950: #04351c;
+  /* Rydepus brand scale — anchored so `brand-500` is the primary navy
+     (#1E3A8A) used for buttons and accents in both light and dark modes. */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #cbe0fc;
+  --color-brand-300: #9dc0f8;
+  --color-brand-400: #71a2f4;
+  --color-brand-500: #1e3a8a;
+  --color-brand-600: #2a4aa8;
+  --color-brand-700: #1e40af;
+  --color-brand-800: #1a358f;
+  --color-brand-900: #16306f;
+  --color-brand-950: #10224e;
 
-  --color-ink-50: #f8fafc;
-  --color-ink-100: #f1f5f9;
-  --color-ink-200: #e2e8f0;
-  --color-ink-300: #cbd5e1;
-  --color-ink-400: #94a3b8;
-  --color-ink-500: #64748b;
-  --color-ink-600: #475569;
-  --color-ink-700: #334155;
-  --color-ink-800: #1e293b;
-  --color-ink-900: #0f172a;
+  /* Neutrals are blue-tinted so light-mode text reads navy (#1E3A8A) and
+     ink-50 doubles as the DBEAFE light background. */
+  --color-ink-50: #dbeafe;
+  --color-ink-100: #d6e7fc;
+  --color-ink-200: #c4d9f7;
+  --color-ink-300: #a8c5f0;
+  --color-ink-400: #7e9fd9;
+  --color-ink-500: #5c7cc4;
+  --color-ink-600: #46669f;
+  --color-ink-700: #355084;
+  --color-ink-800: #28406e;
+  --color-ink-900: #1e3a8a;
 
   --color-keke-100: #fef3c7;
   --color-keke-200: #fde68a;
@@ -35,6 +40,20 @@
   --color-keke-400: #fbbf24;
   --color-keke-500: #f59e0b;
   --color-keke-600: #d97706;
+
+  /* Override the default slate scale with the Rydepus blues so that all
+     `dark:text-slate-*` classes resolve to the DBEAFE dark-mode text. */
+  --color-slate-50: #eff6ff;
+  --color-slate-100: #dbeafe;
+  --color-slate-200: #c9dffc;
+  --color-slate-300: #9dc0f8;
+  --color-slate-400: #7e9fd9;
+  --color-slate-500: #5c7cc4;
+  --color-slate-600: #46669f;
+  --color-slate-700: #355084;
+  --color-slate-800: #28406e;
+  --color-slate-900: #1e3a8a;
+  --color-slate-950: #10224e;
 }
 
 @layer base {
@@ -80,7 +99,7 @@
     display: none;
   }
 
-  @keyframes keke-float {
+  @keyframes ryde-float {
     0%,
     100% {
       transform: translateY(0);
@@ -90,11 +109,11 @@
     }
   }
 
-  .animate-keke-float {
-    animation: keke-float 5s ease-in-out infinite;
+  .animate-ryde-float {
+    animation: ryde-float 5s ease-in-out infinite;
   }
 
-  @keyframes keke-step {
+  @keyframes ryde-step {
     from {
       opacity: 0;
       transform: translateY(10px);
@@ -105,8 +124,8 @@
     }
   }
 
-  .animate-keke-step {
-    animation: keke-step 0.35s ease-out both;
+  .animate-ryde-step {
+    animation: ryde-step 0.35s ease-out both;
   }
 }
 

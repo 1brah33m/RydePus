@@ -172,7 +172,7 @@ export function Profile() {
         </button>
       </section>
 
-      <p className="pb-2 text-center text-xs text-ink-400 dark:text-slate-500">KekeGo · Campus Shuttle (MVP)</p>
+      <p className="pb-2 text-center text-xs text-ink-400 dark:text-slate-500">Rydepus · Campus Shuttle (MVP)</p>
 
       {/* Edit profile modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Profile">
@@ -218,7 +218,7 @@ export function Profile() {
 
       {/* Logout confirm modal */}
       <Modal open={confirmLogout} onClose={() => setConfirmLogout(false)} title="Log out?">
-        <p className="text-sm text-ink-600">You will need to sign in again to use KekeGo.</p>
+        <p className="text-sm text-ink-600">You will need to sign in again to use Rydepus.</p>
         <div className="mt-5 flex gap-3">
           <Button variant="outline" fullWidth onClick={() => setConfirmLogout(false)}>
             Stay

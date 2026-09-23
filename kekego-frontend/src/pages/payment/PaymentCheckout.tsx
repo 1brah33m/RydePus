@@ -72,15 +72,15 @@ export function PaymentCheckout() {
       <>
         <AppHeader title="Payment" onBack={() => navigate('/home')} />
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-          <span className="flex size-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15">
-            <CheckCircle2 aria-hidden className="size-9 text-emerald-600 dark:text-emerald-300" />
+          <span className="flex size-16 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-500/15">
+            <CheckCircle2 aria-hidden className="size-9 text-brand-700 dark:text-brand-300" />
           </span>
           <h2 className="mt-5 text-xl font-bold text-ink-900 dark:text-slate-100">Payment successful</h2>
           <p className="mt-2 text-sm text-ink-500 dark:text-slate-400">
             {formatCurrency(total)} paid for 4 seats ({pickup.name} → {destination.name}).
           </p>
-          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-violet-50 px-4 py-1.5 text-sm font-semibold text-violet-700">
-            <span className="size-1.5 animate-pulse rounded-full bg-violet-500" />
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-brand-50 px-4 py-1.5 text-sm font-semibold text-brand-700">
+            <span className="size-1.5 animate-pulse rounded-full bg-brand-500" />
             Group FULL — finding driver…
           </div>
         </div>

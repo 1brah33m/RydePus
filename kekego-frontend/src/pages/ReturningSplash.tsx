@@ -51,7 +51,7 @@ export function ReturningSplash() {
         )}
       </div>
 
-      <p className="absolute bottom-10 text-xs text-ink-500">KekeGo — Campus Shuttle</p>
+      <p className="absolute bottom-10 text-xs text-ink-500">Rydepus — Campus Shuttle</p>
     </div>
   )
 }

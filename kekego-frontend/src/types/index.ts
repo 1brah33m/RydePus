@@ -1,5 +1,5 @@
 /**
- * Core domain types for the KekeGo student app.
+ * Core domain types for the Rydepus app.
  *
  * These mirror the future backend API contract. The frontend only displays
  * state produced by the (mock) backend — it never enforces business rules

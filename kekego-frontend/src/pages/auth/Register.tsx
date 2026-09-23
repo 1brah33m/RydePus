@@ -140,10 +140,10 @@ export function Register() {
   // ------- Step 1 · email / Google -------
   const EmailStep = (
     <div key="email" className="animate-keke-step flex flex-col">
-      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-400">
+      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-400/40 bg-brand-400/10 px-3 py-1 text-xs font-semibold text-brand-400">
         Join as Student · 1 of 2
       </div>
-      <h1 className="text-[26px] font-bold tracking-tight text-white">Join KekeGo as Student</h1>
+      <h1 className="text-[26px] font-bold tracking-tight text-white">Join Rydepus as Student</h1>
       <p className="mt-1.5 text-sm text-ink-400">Ride with your classmates, split the fare, get there together.</p>
 
       <div className="mt-7">
@@ -203,7 +203,7 @@ export function Register() {
   // ------- Step 2 · student profile -------
   const ProfileStep = (
     <div key="profile" className="animate-keke-step flex flex-col">
-      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-400">
+      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-400/40 bg-brand-400/10 px-3 py-1 text-xs font-semibold text-brand-400">
         Join as Student · 2 of 2
       </div>
       <h1 className="text-[26px] font-bold tracking-tight text-white">Student Details</h1>
@@ -214,7 +214,7 @@ export function Register() {
           <div className="flex size-16 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white ring-1 ring-white/10">
             {nameInitials}
           </div>
-          <span className="absolute -right-0.5 bottom-0 flex size-6 items-center justify-center rounded-full bg-brand-500 text-white ring-4 ring-charcoal">
+          <span className="absolute -right-0.5 bottom-0 flex size-6 items-center justify-center rounded-full bg-brand-500 text-white ring-4 ring-white/10">
             <Camera className="size-3" />
           </span>
         </div>
@@ -308,15 +308,15 @@ export function Register() {
 
   // ------- Step 3 · verifying -------
   const VerifyingStep = (
-    <div key="verifying" className="animate-keke-step flex flex-col items-center pt-14 text-center">
+    <div key="verifying" className="animate-ryde-step flex flex-col items-center pt-14 text-center">
       <VerifyingTimer navigate={navigate} />
       <div className="relative mb-10 h-20 w-40">
         <div className="absolute inset-0 rounded-full bg-brand-500/25 blur-2xl animate-pulse" />
         <div className="relative flex items-center justify-center pt-2">
-          <span className="flex size-16 items-center justify-center rounded-full bg-brand-500 shadow-[0_0_40px_rgba(0,230,118,0.5)]">
-            <span className="text-[28px] font-bold leading-none text-charcoal">K</span>
+          <span className="flex size-16 items-center justify-center rounded-full bg-brand-500 shadow-[0_0_40px_rgba(30,58,138,0.55)]">
+            <span className="text-[28px] font-bold leading-none text-white">R</span>
           </span>
-          <span className="-ml-1 text-[32px] font-light leading-none text-charcoal">o</span>
+          <span className="-ml-1 text-[32px] font-light leading-none text-white">y</span>
         </div>
       </div>
       <h2 className="text-2xl font-bold tracking-tight text-white">Verifying Student Status…</h2>

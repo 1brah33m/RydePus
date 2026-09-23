@@ -117,8 +117,8 @@ export function TripDetail() {
         <AppHeader title="Trip completed" />
         <div className="flex flex-col gap-5 pb-10 pt-3">
           <Card className="p-5 text-center">
-            <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-500/15">
-              <CheckCircle2 aria-hidden className="size-8 text-emerald-600 dark:text-emerald-300" />
+            <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-brand-50 dark:bg-brand-500/10">
+              <CheckCircle2 aria-hidden className="size-8 text-brand-700 dark:text-brand-300" />
             </span>
             <h2 className="mt-4 text-xl font-bold text-ink-900 dark:text-slate-100">Trip Completed</h2>
             <RouteIndicator pickup={trip.pickup} destination={trip.destination} className="mt-2 justify-center" size="sm" />

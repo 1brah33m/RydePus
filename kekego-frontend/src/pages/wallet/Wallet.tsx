@@ -23,12 +23,12 @@ export function WalletPage() {
     <div className="flex min-h-full flex-col gap-5 pb-8 pt-10 lg:pt-8">
       <header>
         <h1 className="text-xl font-bold tracking-tight text-ink-900 dark:text-slate-100">Wallet</h1>
-        <p className="mt-0.5 text-sm text-ink-500 dark:text-slate-400">Your KekeGo balance and payment activity.</p>
+        <p className="mt-0.5 text-sm text-ink-500 dark:text-slate-400">Your Rydepus balance and payment activity.</p>
       </header>
 
       {/* Balance card */}
       <section aria-label="Wallet balance">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white shadow-lg shadow-brand-600/25">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-600 to-brand-400 p-6 text-white shadow-lg shadow-brand-600/25">
           <div className="absolute -right-10 -top-10 size-36 rounded-full bg-white/15 blur-2xl" aria-hidden />
           <div className="relative flex items-start justify-between">
             <div>

@@ -42,7 +42,7 @@ export function Onboarding() {
       <main className="relative z-10 flex flex-1 flex-col justify-between px-6 pb-8">
         {/* Graphic */}
         <div className="mt-2 flex justify-center">
-          <div className="animate-keke-float w-full max-w-[300px]">
+          <div className="animate-ryde-float w-full max-w-[300px]">
             <KekeIllustration />
           </div>
         </div>

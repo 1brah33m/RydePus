@@ -41,7 +41,7 @@ const NAV_LINKS: { label: string; id?: string; to?: string }[] = [
  */
 export function LandingPage() {
   return (
-    <div className="min-h-full bg-white text-ink-900">
+    <div className="min-h-full bg-ink-50 text-ink-900">
       <Navbar />
       <HeroSection />
       <FeaturesSection />
@@ -75,12 +75,12 @@ function Navbar() {
   return (
     <nav className="sticky top-0 z-30 bg-charcoal/95 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <button type="button" onClick={() => scrollTo('home')} className="flex items-center gap-2" aria-label="KekeGo home">
+        <button type="button" onClick={() => scrollTo('home')} className="flex items-center gap-2" aria-label="Rydepus home">
           <span className="flex size-9 items-center justify-center rounded-xl bg-brand-600 text-white">
             <CarFront aria-hidden className="size-5" strokeWidth={2.2} />
           </span>
           <span className="text-xl font-extrabold tracking-tight text-white">
-            Keke<span className="text-brand-400">Go</span>
+            Ryde<span className="text-brand-400">pus</span>
           </span>
         </button>
 
@@ -166,7 +166,7 @@ function HeroSection() {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(60% 45% at 70% -10%, rgba(0,230,118,0.16) 0%, rgba(0,230,118,0) 60%)',
+            'radial-gradient(60% 45% at 70% -10%, rgba(113,162,244,0.18) 0%, rgba(113,162,244,0) 60%)',
         }}
       />
 
@@ -282,7 +282,7 @@ function BookingCard() {
               onClick={() => navigate('/register/student')}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-600 py-4 text-base font-bold text-white transition-colors hover:bg-brand-700 active:scale-[0.98]"
             >
-              Request KekeGo
+              Request Rydepus
               <ArrowRight aria-hidden className="size-5" />
             </button>
           </div>
@@ -351,7 +351,7 @@ function FeaturesSection() {
             </p>
           </div>
 
-          {/* Earn with KekeGo — highlighted CTA card */}
+          {/* Earn with Rydepus — highlighted CTA card */}
           <button
             type="button"
             onClick={() => navigate('/register/driver')}
@@ -360,17 +360,17 @@ className="group flex h-full flex-col items-start rounded-3xl bg-gradient-to-br 
             <span className="flex size-11 items-center justify-center rounded-2xl bg-charcoal text-brand-300">
               <Star aria-hidden className="size-6" />
             </span>
-            <h3 className="mt-4 text-base font-bold tracking-tight text-charcoal">Earn with KekeGo</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-charcoal/80">
+            <h3 className="mt-4 text-base font-bold tracking-tight text-white">Earn with Rydepus</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-white/80">
               Pick your hours, drive your own keke, and turn spare time into income.
             </p>
-            <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-charcoal underline-offset-4 group-hover:underline">
+            <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-white underline-offset-4 group-hover:underline">
               Start earning
               <ArrowRight aria-hidden className="size-4" />
             </span>
           </button>
 
-          {/* Safety with KekeGo — highlighted CTA card */}
+          {/* Safety with Rydepus — highlighted CTA card */}
           <button
             type="button"
             onClick={() => navigate('/register/student')}
@@ -379,7 +379,7 @@ className="group flex h-full flex-col items-start rounded-3xl bg-gradient-to-br 
             <span className="flex size-11 items-center justify-center rounded-2xl bg-brand-600 text-white">
               <ShieldCheck aria-hidden className="size-6" />
             </span>
-            <h3 className="mt-4 text-base font-bold tracking-tight text-white">Safety with KekeGo</h3>
+            <h3 className="mt-4 text-base font-bold tracking-tight text-white">Safety with Rydepus</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-white/65">
               Every ride logs a verified driver and a tracked campus route.
             </p>
@@ -419,7 +419,7 @@ function FooterSection() {
                 <CarFront aria-hidden className="size-5" strokeWidth={2.2} />
               </span>
               <span className="text-xl font-extrabold tracking-tight">
-                Keke<span className="text-brand-400">Go</span>
+                Ryde<span className="text-brand-400">pus</span>
               </span>
             </span>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/55">
@@ -481,7 +481,7 @@ function FooterSection() {
                   </button>
                 </li>
                 <li>
-                  <a href="mailto:hello@kekego.app" className="text-white/80 transition-colors hover:text-brand-400">
+                  <a href="mailto:hello@rydepus.app" className="text-white/80 transition-colors hover:text-brand-400">
                     Contact
                   </a>
                 </li>
@@ -491,7 +491,7 @@ function FooterSection() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-5 border-t border-white/10 pt-6 sm:flex-row">
-          <p className="text-xs text-white/40">© {year} KekeGo · Campus Mobility</p>
+          <p className="text-xs text-white/40">© {year} Rydepus · Campus Mobility</p>
           <div className="flex gap-2.5">
             {SOCIALS.map(({ label, icon: Icon }) => (
               <a

@@ -133,11 +133,11 @@ export function DriverRegister() {
 
   // ------- Step 1 · email / Google -------
   const IdentityStep = (
-    <div key="email" className="animate-keke-step flex flex-col">
+    <div key="email" className="animate-ryde-step flex flex-col">
       <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-400">
         Join as Driver · 1 of 2
       </div>
-      <h1 className="text-[26px] font-bold tracking-tight text-white">Join KekeGo as Driver</h1>
+      <h1 className="text-[26px] font-bold tracking-tight text-white">Join Rydepus as Driver</h1>
       <p className="mt-1.5 text-sm text-ink-400">Create your account to get started.</p>
 
       <div className="mt-7">
@@ -193,7 +193,7 @@ export function DriverRegister() {
 
   // ------- Step 2 · driver verification -------
   const DetailsStep = (
-    <div key="profile" className="animate-keke-step flex flex-col">
+    <div key="profile" className="animate-ryde-step flex flex-col">
       <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-400">
         Join as Driver · 2 of 2
       </div>
@@ -205,7 +205,7 @@ export function DriverRegister() {
           <div className="flex size-16 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white ring-1 ring-white/10">
             {nameInitials}
           </div>
-          <span className="absolute -right-0.5 bottom-0 flex size-6 items-center justify-center rounded-full bg-brand-500 text-white ring-4 ring-charcoal">
+          <span className="absolute -right-0.5 bottom-0 flex size-6 items-center justify-center rounded-full bg-brand-500 text-white ring-4 ring-white/10">
             <Camera className="size-3" />
           </span>
         </div>
@@ -270,10 +270,10 @@ export function DriverRegister() {
             className={cn(
               'flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-5 transition',
               details.licenseFile
-                ? 'border-brand-500/50 bg-brand-500/10'
+                ? 'border-brand-400/50 bg-brand-400/10'
                 : errors.licenseFile
                   ? 'border-rose-400/60 bg-rose-500/10'
-                  : 'border-white/15 bg-white/[0.04] hover:border-brand-500/50 hover:bg-white/[0.06]',
+                  : 'border-white/15 bg-white/[0.04] hover:border-brand-400/50 hover:bg-white/[0.06]',
             )}
           >
             {details.licenseFile ? (

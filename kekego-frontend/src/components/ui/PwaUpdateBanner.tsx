@@ -32,12 +32,12 @@ export function PwaUpdateBanner() {
     <div className="fixed inset-x-0 top-0 z-[60] px-4 pt-4">
       <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-ink-200 bg-white p-3 pl-4 shadow-2xl dark:border-slate-700 dark:bg-[#1E1E1E]">
         <p className="text-sm font-medium leading-snug text-ink-800 dark:text-slate-200">
-          A new version of KekeGo is available.
+          A new version of Rydepus is available.
         </p>
         <button
           type="button"
           onClick={() => updateSWRef.current?.(true)}
-          className="shrink-0 rounded-xl bg-brand-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-brand-600 dark:text-charcoal"
+          className="shrink-0 rounded-xl bg-brand-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-brand-600"
         >
           Reload
         </button>

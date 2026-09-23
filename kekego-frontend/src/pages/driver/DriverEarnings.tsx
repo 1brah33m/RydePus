@@ -47,7 +47,7 @@ export function DriverEarnings() {
                 Available balance
               </p>
               <p className="mt-2 text-3xl font-bold tracking-tight">{formatCurrency(WEEK_TOTAL)}</p>
-              <p className="mt-1 text-xs text-ink-500 dark:text-slate-400">Next payout Friday · KekeGo Wallet</p>
+              <p className="mt-1 text-xs text-ink-500 dark:text-slate-400">Next payout Friday · Rydepus Wallet</p>
             </div>
           </div>
         </section>
@@ -104,7 +104,7 @@ export function DriverEarnings() {
           </div>
           <button
             type="button"
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-4 text-base font-bold text-white transition-transform active:scale-[0.98] dark:text-charcoal"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-4 text-base font-bold text-white transition-transform active:scale-[0.98]"
           >
             Withdraw Earnings
             <ChevronRight aria-hidden className="size-5" />
@@ -114,7 +114,7 @@ export function DriverEarnings() {
           </p>
         </section>
 
-        <p className="pb-2 text-center text-xs text-ink-400 dark:text-slate-500">KekeGo · Campus Shuttle (MVP)</p>
+        <p className="pb-2 text-center text-xs text-ink-400 dark:text-slate-500">Rydepus · Campus Shuttle (MVP)</p>
       </div>
     </DriverShell>
   )

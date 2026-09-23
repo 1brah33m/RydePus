@@ -18,11 +18,11 @@ export function DriverShell({ children }: DriverShellProps) {
   return (
     <div className="flex min-h-full w-full">
       <DesktopSidebar
-        brand="KekeGo"
+        brand="Rydepus"
         items={ITEMS}
         profileTo="/driver/profile"
         profileLabel="Driver Profile"
-        footer="KekeGo · Campus Shuttle (MVP)"
+        footer="Rydepus · Campus Shuttle (MVP)"
       />
       <main className="relative min-h-full min-w-0 flex-1 bg-ink-50 pb-24 safe-top text-ink-900 dark:bg-charcoal dark:text-white lg:pb-12">
         <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">{children}</div>

@@ -121,7 +121,7 @@ export function Login() {
       </div>
 
       <p className="mt-6 text-center text-sm text-ink-400">
-        New to KekeGo?{' '}
+        New to Rydepus?{' '}
         <Link to="/register" className="font-semibold text-brand-400 hover:underline">
           Create an account
         </Link>

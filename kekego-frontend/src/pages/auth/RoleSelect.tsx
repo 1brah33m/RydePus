@@ -19,7 +19,7 @@ export function RoleSelect() {
   }, [status, navigate])
 
   return (
-    <AuthLayout title="Create your account" subtitle="Choose how you'll ride with KekeGo.">
+    <AuthLayout title="Create your account" subtitle="Choose how you'll ride with Rydepus.">
       <div className="flex flex-col gap-4">
         <button
           type="button"
@@ -36,7 +36,7 @@ export function RoleSelect() {
         <button
           type="button"
           onClick={() => navigate('/register/driver')}
-          className="flex h-14 w-full items-center justify-between rounded-full border-2 border-brand-500 bg-transparent px-6 text-base font-bold text-white transition hover:bg-brand-500/10 active:scale-[0.98]"
+          className="flex h-14 w-full items-center justify-between rounded-full border-2 border-brand-400 bg-transparent px-6 text-base font-bold text-white transition hover:bg-brand-400/15 active:scale-[0.98]"
         >
           <span className="flex items-center gap-3">
             <CarFront aria-hidden className="size-5" />

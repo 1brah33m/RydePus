@@ -8,7 +8,7 @@ interface LogoProps {
   tone?: 'dark' | 'light'
 }
 
-/** KekeGo wordmark + icon. Branding is centralized here so it is easy to change. */
+/** Rydepus wordmark + icon. Branding is centralized here so it is easy to change. */
 export function Logo({ className, iconOnly = false, tone = 'light' }: LogoProps) {
   return (
     <div className={cn('flex items-center gap-2', className)}>
@@ -22,8 +22,8 @@ export function Logo({ className, iconOnly = false, tone = 'light' }: LogoProps)
             tone === 'dark' ? 'text-white' : 'text-ink-900',
           )}
         >
-          Keke
-          <span className={tone === 'dark' ? 'text-brand-400' : 'text-brand-600'}>Go</span>
+          Ryde
+          <span className={tone === 'dark' ? 'text-brand-400' : 'text-brand-600'}>pus</span>
         </span>
       )}
     </div>

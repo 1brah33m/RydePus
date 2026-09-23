@@ -146,7 +146,7 @@ export function DriverRequests() {
         {dispatches.length > 0 && (
           <section aria-label="Priority dispatches">
             <div className="mb-2.5 flex items-center gap-2">
-              <span className="flex size-6 items-center justify-center rounded-full bg-violet-500 text-white">
+              <span className="flex size-6 items-center justify-center rounded-full bg-brand-500 text-white">
                 <Flame aria-hidden className="size-3.5" />
               </span>
               <h2 className="text-sm font-bold tracking-tight">HIGH PRIORITY · READY TO DEPART</h2>
@@ -252,7 +252,7 @@ function RequestCard({
         <button
           type="button"
           onClick={onAccept}
-          className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-brand-500 text-sm font-bold text-charcoal transition-transform active:scale-[0.98]"
+          className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-brand-500 text-sm font-bold text-white transition-transform active:scale-[0.98]"
         >
           Accept Request
         </button>
@@ -280,9 +280,9 @@ function DispatchCard({
   return (
     <article
       aria-label={`Priority ride: ${dispatch.pickup.name} to ${dispatch.destination.name}`}
-      className="relative overflow-hidden rounded-2xl border-2 border-violet-500/60 bg-white p-4 shadow-[0_8px_30px_rgba(124,93,250,0.22)] dark:border-violet-400/40 dark:bg-[#1E1E1E]"
+      className="relative overflow-hidden rounded-2xl border-2 border-brand-500/60 bg-white p-4 shadow-[0_8px_30px_rgba(30,58,138,0.22)] dark:border-brand-400/40 dark:bg-[#1E1E1E]"
     >
-      <span aria-hidden className="absolute -right-6 -top-6 size-24 rounded-full bg-violet-500/10 blur-2xl" />
+      <span aria-hidden className="absolute -right-6 -top-6 size-24 rounded-full bg-brand-500/10 blur-2xl" />
 
       <div className="flex items-start justify-between gap-3">
         <p className="text-base font-bold leading-snug">
@@ -290,7 +290,7 @@ function DispatchCard({
           <span className="mx-1.5" aria-hidden>→</span>
           {dispatch.destination.name}
         </p>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
           <Flame aria-hidden className="size-3" />
           Fully funded
         </span>
@@ -302,13 +302,13 @@ function DispatchCard({
       </p>
 
       <div className="mt-4 flex items-center gap-2">
-        <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1.5 text-sm font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+        <span className="inline-flex items-center rounded-lg bg-brand-50 px-2.5 py-1.5 text-sm font-bold text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
           {formatCurrency(dispatch.fare)}
         </span>
         <button
           type="button"
           onClick={onAccept}
-          className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-violet-500 text-sm font-bold text-white transition-transform active:scale-[0.98]"
+          className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-brand-500 text-sm font-bold text-white transition-transform active:scale-[0.98]"
         >
           Accept Ride
         </button>
@@ -363,7 +363,7 @@ function EmptyState({
         <button
           type="button"
           onClick={onGoOnline}
-          className="mt-5 inline-flex h-11 items-center justify-center rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98] dark:text-charcoal"
+          className="mt-5 inline-flex h-11 items-center justify-center rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98]"
         >
           Go Online
         </button>

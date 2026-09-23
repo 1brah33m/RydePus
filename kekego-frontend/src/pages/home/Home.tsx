@@ -87,7 +87,7 @@ export function Home() {
       {/* Greeting + avatar */}
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-700 dark:text-brand-300">KekeGo</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-700 dark:text-brand-300">Rydepus</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 dark:text-slate-100">
             {greetingFor(hour)}, {student ? firstName(student.fullName).trim() : 'there'}!
           </h1>

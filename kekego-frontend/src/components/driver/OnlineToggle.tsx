@@ -15,7 +15,7 @@ export function OnlineToggle({ online, onToggle }: OnlineToggleProps) {
       className={cn(
         'inline-flex shrink-0 items-center gap-2 rounded-full py-2 pl-3 pr-2 text-xs font-semibold transition-colors',
         online
-          ? 'bg-brand-50 text-brand-600 shadow-[0_0_0_1px_rgba(0,200,106,0.35)] dark:bg-brand-500/15 dark:text-brand-400 dark:shadow-[0_0_0_1px_rgba(0,230,118,0.35)]'
+          ? 'bg-brand-50 text-brand-600 shadow-[0_0_0_1px_rgba(30,58,138,0.4)] dark:bg-brand-500/15 dark:text-brand-400 dark:shadow-[0_0_0_1px_rgba(30,58,138,0.4)]'
           : 'bg-ink-100 text-ink-600 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-white/5 dark:text-slate-400 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.08)]',
       )}
     >

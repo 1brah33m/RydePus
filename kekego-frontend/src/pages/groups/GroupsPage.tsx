@@ -12,7 +12,7 @@ import { RouteIndicator } from '../../components/shared/RouteIndicator'
 import { cn } from '../../utils/cn'
 import type { Group, GroupMember } from '../../types'
 
-const AVATAR_COLORS = ['bg-brand-500', 'bg-sky-500', 'bg-violet-500', 'bg-keke-500']
+const AVATAR_COLORS = ['bg-brand-500', 'bg-sky-500', 'bg-brand-400', 'bg-keke-500']
 
 /** Minutes until the group departs. Newly created groups default to +15 min from creation. */
 function minutesToDeparture(group: Group): number {
