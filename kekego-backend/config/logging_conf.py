@@ -9,7 +9,8 @@ Sensitive data (passwords, JWT tokens, ...) is never logged.
 
 import json
 import logging
-from datetime import datetime, timezone
+import os
+from datetime import UTC, datetime
 
 
 class JsonFormatter(logging.Formatter):
@@ -17,11 +18,16 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
+            "service": "rydepus-backend",
+            "environment": os.environ.get("DJANGO_ENV", "development"),
             "message": record.getMessage(),
         }
+        request_id = getattr(record, "request_id", None)
+        if request_id:
+            payload["request_id"] = request_id
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
         if record.args:
@@ -56,5 +62,10 @@ def build_logging(debug: bool) -> dict:
             "celery": {"handlers": ["console"], "level": "INFO", "propagate": False},
             "celery.task": {"handlers": ["console"], "level": "INFO", "propagate": False},
             "campus_keke": {"handlers": ["console"], "level": "DEBUG" if debug else "INFO", "propagate": False},
+            "campus_keke.request": {"handlers": ["console"], "level": "INFO", "propagate": False},
+            "campus_keke.tasks": {"handlers": ["console"], "level": "INFO", "propagate": False},
+            "campus_keke.errors": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+            "campus_keke.audit": {"handlers": ["console"], "level": "INFO", "propagate": False},
+            "campus_keke.monitor": {"handlers": ["console"], "level": "INFO", "propagate": False},
         },
     }

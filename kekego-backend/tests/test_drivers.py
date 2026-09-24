@@ -1,6 +1,5 @@
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from apps.drivers.models import DriverProfile
 from apps.groups.models import Group
@@ -52,7 +51,10 @@ def test_availability_is_locked_during_active_trip(driver_client, driver_user, s
 
     response = driver_client.patch(AVAILABILITY_URL, {"availability_status": "ONLINE"}, format="json")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert driver_client.patch(AVAILABILITY_URL, {"availability_status": "OFFLINE"}, format="json").status_code == status.HTTP_400_BAD_REQUEST
+    assert (
+        driver_client.patch(AVAILABILITY_URL, {"availability_status": "OFFLINE"}, format="json").status_code
+        == status.HTTP_400_BAD_REQUEST
+    )
     assert trip.driver_id == driver_user.id
 
 

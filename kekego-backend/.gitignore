@@ -19,6 +19,11 @@ media/
 staticfiles/collectstatic/
 staticfiles/
 
+# Database backups contain customer data - never commit them.
+backups/
+backups/*.dump
+backups/*.sqlite
+
 # Test / coverage / lint
 .pytest_cache/
 .coverage

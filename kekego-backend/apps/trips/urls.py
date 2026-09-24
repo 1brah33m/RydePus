@@ -1,6 +1,14 @@
 from django.urls import path
 
-from apps.trips.views import AvailableTripListView, DriverTripCancelView, StudentTripCancelView, TripAcceptView, TripListCreateView, TripRatingCreateView, TripStatusUpdateView
+from apps.trips.views import (
+    AvailableTripListView,
+    DriverTripCancelView,
+    StudentTripCancelView,
+    TripAcceptView,
+    TripListCreateView,
+    TripRatingCreateView,
+    TripStatusUpdateView,
+)
 
 urlpatterns = [
     path("", TripListCreateView.as_view(), name="trips-list-create"),

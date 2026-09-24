@@ -2,14 +2,16 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
-from config.views import HealthView
+from config.views import HealthView, ReadinessView
 
 handler404 = "config.views.api_404"
 handler403 = "config.views.api_403"
 handler500 = "config.views.api_500"
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    # Admin path is configurable via DJANGO_ADMIN_URL so production can hide it
+    # at a non-guessable route (default: admin/).
+    path(f"{settings.ADMIN_URL}/", admin.site.urls),
     # API v1
     path("api/v1/auth/", include("apps.users.urls")),
     path("api/v1/drivers/", include("apps.drivers.urls")),
@@ -18,19 +20,20 @@ urlpatterns = [
     path("api/v1/payments/", include("apps.payments.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/health/", HealthView.as_view(), name="health"),
+    path("api/v1/health/ready/", ReadinessView.as_view(), name="readiness"),
 ]
 
 # API documentation is opt-in via DJANGO_ENABLE_API_DOCS (default: dev only)
 # so a misconfigured deployment never leaks the schema or admin-style docs.
 if getattr(settings, "ENABLE_API_DOCS", False):
     # Importing this module registers the JWT security scheme with drf-spectacular.
-    import config.spectacular  # noqa: F401
-
     from drf_spectacular.views import (
         SpectacularAPIView,
         SpectacularRedocView,
         SpectacularSwaggerView,
     )
+
+    import config.spectacular  # noqa: F401
 
     urlpatterns += [
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

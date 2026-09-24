@@ -1,0 +1,23 @@
+line-length = 120
+target-version = "py311"
+exclude = ["migrations", ".venv", "venv"]
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "C4",  # flake8-comprehensions
+]
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+"tests/*" = ["N802", "N803", "N806"]
+"config/settings/*.py" = ["F405"]  # names come from `from .base import *`
+
+[lint.isort]
+known-first-party = ["apps", "config"]

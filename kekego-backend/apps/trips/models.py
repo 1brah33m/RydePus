@@ -29,6 +29,12 @@ class Trip(models.Model):
     )
     pickup_location = models.CharField(max_length=255)
     destination = models.CharField(max_length=255)
+    # Optional coordinates (WGS84). Ranges are enforced by the DB so a bad
+    # client payload can never persist out-of-range latitude/longitude.
+    pickup_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    pickup_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    destination_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    destination_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     fare = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -36,6 +42,37 @@ class Trip(models.Model):
 
     class Meta:
         ordering = ("-created_at",)
+        constraints = [
+            # Fares are never negative. The API additionally requires > 0 (see
+            # the create serializer); this constraint is a safety net.
+            models.CheckConstraint(condition=models.Q(fare__gte=0), name="trip_fare_non_negative"),
+            models.CheckConstraint(
+                condition=(models.Q(pickup_lat__isnull=True) | models.Q(pickup_lat__gte=-90, pickup_lat__lte=90)),
+                name="trip_pickup_lat_range",
+            ),
+            models.CheckConstraint(
+                condition=(models.Q(pickup_lng__isnull=True) | models.Q(pickup_lng__gte=-180, pickup_lng__lte=180)),
+                name="trip_pickup_lng_range",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(destination_lat__isnull=True) | models.Q(destination_lat__gte=-90, destination_lat__lte=90)
+                ),
+                name="trip_destination_lat_range",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(destination_lng__isnull=True)
+                    | models.Q(destination_lng__gte=-180, destination_lng__lte=180)
+                ),
+                name="trip_destination_lng_range",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("status", "driver"), name="trip_status_driver_idx"),
+            models.Index(fields=("created_by", "-created_at"), name="trip_creator_created_idx"),
+            models.Index(fields=("pickup_location", "destination"), name="trip_route_idx"),
+        ]
 
     def can_transition_to(self, new_status):
         current = self.status

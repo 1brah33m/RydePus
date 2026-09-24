@@ -100,23 +100,31 @@ def test_online_driver_can_discover_pending_trips(driver_user, student_user):
     response = client.get(AVAILABLE_TRIPS_URL)
 
     assert response.status_code == status.HTTP_200_OK
-    assert [item["id"] for item in response.json()] == [trip.id]
+    assert [item["id"] for item in response.json()["results"]] == [trip.id]
 
 
 @pytest.mark.django_db
 def test_driver_can_filter_available_trips_by_route(driver_user, student_user):
-    matching_group = Group.objects.create(name="Match", pickup_location="North Gate", destination="Library", capacity=2, created_by=student_user)
-    matching = matching_group.trip_set.create(created_by=student_user, pickup_location="North Gate", destination="Library", fare=120)
-    other_group = Group.objects.create(name="Other", pickup_location="South Gate", destination="Library", capacity=2, created_by=student_user)
+    matching_group = Group.objects.create(
+        name="Match", pickup_location="North Gate", destination="Library", capacity=2, created_by=student_user
+    )
+    matching = matching_group.trip_set.create(
+        created_by=student_user, pickup_location="North Gate", destination="Library", fare=120
+    )
+    other_group = Group.objects.create(
+        name="Other", pickup_location="South Gate", destination="Library", capacity=2, created_by=student_user
+    )
     other_group.trip_set.create(created_by=student_user, pickup_location="South Gate", destination="Library", fare=120)
-    DriverProfile.objects.update_or_create(user=driver_user, defaults={"availability_status": DriverProfile.AvailabilityStatus.ONLINE})
+    DriverProfile.objects.update_or_create(
+        user=driver_user, defaults={"availability_status": DriverProfile.AvailabilityStatus.ONLINE}
+    )
     client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
     client.force_authenticate(driver_user)
 
     response = client.get(AVAILABLE_TRIPS_URL, {"pickup_location": "north gate", "destination": "library"})
 
     assert response.status_code == status.HTTP_200_OK
-    assert [item["id"] for item in response.json()] == [matching.id]
+    assert [item["id"] for item in response.json()["results"]] == [matching.id]
 
 
 @pytest.mark.django_db
@@ -245,7 +253,9 @@ def test_student_cannot_cancel_an_accepted_trip(student_client, student_user, dr
 
 @pytest.mark.django_db
 def test_completed_trip_participant_can_rate_once(student_client, student_user, driver_user):
-    group = Group.objects.create(name="Rated Ride", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user)
+    group = Group.objects.create(
+        name="Rated Ride", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user
+    )
     trip = group.trip_set.create(
         created_by=student_user,
         driver=driver_user,
@@ -255,7 +265,9 @@ def test_completed_trip_participant_can_rate_once(student_client, student_user, 
         status="COMPLETED",
     )
 
-    response = student_client.post(f"{TRIPS_URL}{trip.id}/rating/", {"score": 5, "comment": "Smooth ride."}, format="json")
+    response = student_client.post(
+        f"{TRIPS_URL}{trip.id}/rating/", {"score": 5, "comment": "Smooth ride."}, format="json"
+    )
     duplicate = student_client.post(f"{TRIPS_URL}{trip.id}/rating/", {"score": 4}, format="json")
 
     assert response.status_code == status.HTTP_201_CREATED
@@ -265,7 +277,9 @@ def test_completed_trip_participant_can_rate_once(student_client, student_user, 
 
 @pytest.mark.django_db
 def test_pending_trip_cannot_be_rated(student_client, student_user):
-    group = Group.objects.create(name="Unrated Ride", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user)
+    group = Group.objects.create(
+        name="Unrated Ride", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user
+    )
     trip = group.trip_set.create(created_by=student_user, pickup_location="Gate", destination="Hostel", fare=80)
 
     response = student_client.post(f"{TRIPS_URL}{trip.id}/rating/", {"score": 5}, format="json")
@@ -276,7 +290,9 @@ def test_pending_trip_cannot_be_rated(student_client, student_user):
 
 @pytest.mark.django_db
 def test_assigned_driver_can_cancel_accepted_trip(driver_user, student_user):
-    group = Group.objects.create(name="Driver Cancel Ride", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user)
+    group = Group.objects.create(
+        name="Driver Cancel Ride", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user
+    )
     trip = group.trip_set.create(
         created_by=student_user,
         driver=driver_user,
@@ -301,7 +317,9 @@ def test_assigned_driver_can_cancel_accepted_trip(driver_user, student_user):
 
 @pytest.mark.django_db
 def test_driver_cannot_cancel_trip_not_assigned_to_them(student_user, driver_user):
-    group = Group.objects.create(name="Other Drivers Trip", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user)
+    group = Group.objects.create(
+        name="Other Drivers Trip", pickup_location="Gate", destination="Hostel", capacity=2, created_by=student_user
+    )
     other_driver = User.objects.create_user(
         email="other.driver@example.com",
         password="StrongPass123!",

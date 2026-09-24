@@ -51,9 +51,20 @@ class ManualProvider:
             return False
         return bool(payload.get("data", {}).get("reference"))
 
+    def refund(self, payment, amount) -> dict:
+        """Dev counterpart: refunds are applied synchronously."""
+        reference = f"{payment.provider_reference}_refund"
+        logger.info("manual_refund payment_id=%s amount=%s reference=%s", payment.pk, amount, reference)
+        return {"reference": reference, "status": "SUCCESS"}
+
+    def verify_transaction(self, reference: str) -> dict:
+        """Manual provider has no external truth; report a stable success."""
+        logger.info("manual_reconcile reference=%s", reference)
+        return {"status": "SUCCESS", "reference": reference, "event": "manual.verify", "settlement_reference": ""}
+
 
 class PaystackProvider:
-    """Paystack (NGN) integration using its initialize + webhook APIs."""
+    """Paystack (NGN) integration using its initialize, verify, refund, and webhook APIs."""
 
     name = "paystack"
     base_url = "https://api.paystack.co"
@@ -86,7 +97,7 @@ class PaystackProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with urllib.request.urlopen(request, timeout=15) as response:  # nosec B310 - fixed provider endpoint built from code, never user input
                 body = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -108,6 +119,74 @@ class PaystackProvider:
         signature = str(headers.get("X-Paystack-Signature", ""))
         expected = hmac.new(self.webhook_secret.encode(), raw_body, hashlib.sha512).hexdigest()
         return hmac.compare_digest(signature, expected)
+
+    def _api_get(self, url: str) -> dict:
+        request = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {self.secret_key}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:  # nosec B310 - fixed provider endpoint
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise PaymentProviderError(f"Provider rejected request ({exc.code}): {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise PaymentProviderError(f"Provider unreachable: {exc.reason}") from exc
+
+    def _api_post(self, url: str, payload: dict) -> dict:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:  # nosec B310 - fixed provider endpoint
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise PaymentProviderError(f"Provider rejected refund ({exc.code}): {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise PaymentProviderError(f"Provider unreachable: {exc.reason}") from exc
+
+    def refund(self, payment, amount) -> dict:
+        """Create a Paystack refund for ``amount`` (in minor units)."""
+        body = self._api_post(
+            f"{self.base_url}/transaction/refund",
+            {
+                "transaction": payment.provider_reference,
+                "amount": int(amount * 100),  # kobo
+                "currency": payment.currency,
+            },
+        )
+        if not body.get("status"):
+            raise PaymentProviderError(f"Refund rejected by provider: {body.get('message', 'unknown')}")
+        data = body.get("data", {}) or {}
+        reference = data.get("reference") or ""
+        logger.info("paystack_refund_initialized payment_id=%s reference=%s", payment.pk, reference)
+        return {"reference": reference, "status": str(data.get("status", "SUCCESS")).upper()}
+
+    def verify_transaction(self, reference: str) -> dict:
+        """Verify a transaction's authoritative status with the provider."""
+        body = self._api_get(f"{self.base_url}/transaction/verify/{reference}")
+        if not body.get("status"):
+            raise PaymentProviderError(f"Verify rejected by provider: {body.get('message', 'unknown')}")
+        data = body.get("data", {}) or {}
+        timeline = data.get("timeline", []) or []
+        status = str(data.get("status", "pending")).upper()
+        return {
+            "status": status,
+            "provider": self.name,
+            "reference": reference,
+            "event": (timeline[-1].get("event", "") if timeline else ""),
+            "settlement_reference": str(data.get("settlement_reference", "") or ""),
+            "gateway_response": data.get("gateway_response", ""),
+        }
 
 
 def get_provider():

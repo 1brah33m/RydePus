@@ -308,3 +308,232 @@ def test_paystack_webhook_signature_is_verified():
     assert provider.verify_webhook(body, {"X-Paystack-Signature": signature}) is True
     assert provider.verify_webhook(body, {"X-Paystack-Signature": "forged"}) is False
     assert provider.verify_webhook(body, {}) is False
+
+
+# --------------------------------------------------------------------------
+# Refunds
+# --------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_payer_can_request_refund_for_successful_payment(student_user, student_client):
+    payment = _create_pending_trip_payment(student_user)
+    payment.status = Payment.Status.SUCCESSFUL
+    payment.save(update_fields=["status"])
+
+    response = student_client.post(
+        f"{PAYMENTS_URL}{payment.id}/refund/",
+        {"amount": "100.00", "reason": "Overcharged"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["status"] == "SUCCESSFUL"
+    assert body["amount"] == "100.00"
+    assert body["provider_reference"] == f"{payment.provider_reference}_refund"
+
+    payment.refresh_from_db()
+    assert payment.refunded_amount == 100
+
+
+@pytest.mark.django_db
+def test_refund_rejected_for_pending_payment(student_user, student_client):
+    payment = _create_pending_trip_payment(student_user)
+    response = student_client.post(
+        f"{PAYMENTS_URL}{payment.id}/refund/",
+        {"amount": "50.00"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["error"]["code"] == "INVALID_STATE"
+
+
+@pytest.mark.django_db
+def test_refund_exceeding_outstanding_amount_rejected(student_user, student_client):
+    payment = _create_pending_trip_payment(student_user)
+    payment.status = Payment.Status.SUCCESSFUL
+    payment.save(update_fields=["status"])
+
+    too_big = student_client.post(
+        f"{PAYMENTS_URL}{payment.id}/refund/",
+        {"amount": "9999.00"},
+        format="json",
+    )
+    assert too_big.status_code == status.HTTP_400_BAD_REQUEST
+    assert too_big.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    zero = student_client.post(
+        f"{PAYMENTS_URL}{payment.id}/refund/",
+        {"amount": "0.00"},
+        format="json",
+    )
+    assert zero.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_partial_refund_then_full_refund_updates_ledger(student_user, student_client):
+    payment = _create_pending_trip_payment(student_user, reference="double-refund")
+    payment.status = Payment.Status.SUCCESSFUL
+    payment.save(update_fields=["status"])
+
+    first = student_client.post(
+        f"{PAYMENTS_URL}{payment.id}/refund/",
+        {"amount": "100.00"},
+        format="json",
+    )
+    assert first.status_code == status.HTTP_201_CREATED
+
+    second = student_client.post(
+        f"{PAYMENTS_URL}{payment.id}/refund/",
+        {"amount": "9999.00"},
+        format="json",
+    )
+    assert second.status_code == status.HTTP_400_BAD_REQUEST
+    payment.refresh_from_db()
+    assert payment.refunded_amount == 100
+
+
+@pytest.mark.django_db
+def test_refund_webhook_confirms_pending_refund(api_client, student_user):
+    payment = _create_pending_trip_payment(student_user)
+    payment.status = Payment.Status.SUCCESSFUL
+    payment.save(update_fields=["status"])
+
+    from apps.payments.models import Refund
+
+    refund = Refund.objects.create(
+        payment=payment,
+        initiated_by=student_user,
+        amount=80,
+        status=Refund.Status.PENDING,
+        provider_reference=f"{payment.provider_reference}_refund",
+    )
+
+    response = api_client.post(
+        WEBHOOK_URL,
+        {
+            "event": "refund.processed",
+            "data": {"reference": f"{payment.provider_reference}_refund", "status": "success"},
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    refund.refresh_from_db()
+    payment.refresh_from_db()
+    assert refund.status == Refund.Status.SUCCESSFUL
+    assert payment.refunded_amount == 80
+    assert payment.refunded_at is not None
+
+
+@pytest.mark.django_db
+def test_refund_webhook_unknown_reference_404(api_client):
+    response = api_client.post(
+        WEBHOOK_URL,
+        {"event": "refund.processed", "data": {"reference": "no-such-refund", "status": "success"}},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# --------------------------------------------------------------------------
+# Reconciliation
+# --------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_reconcile_command_confirms_pending_payments(student_user):
+    payment = _create_pending_trip_payment(student_user, reference="reconcile-me-1")
+    assert payment.status == Payment.Status.PENDING
+
+    from django.core.management import call_command
+
+    call_command("reconcile_payments")
+
+    payment.refresh_from_db()
+    assert payment.status == Payment.Status.SUCCESSFUL
+    assert payment.provider_event == "manual.verify"
+
+
+@pytest.mark.django_db
+def test_reconcile_applies_provider_failure_state(student_user):
+    payment = _create_pending_trip_payment(student_user, reference="reconcile-fail-1")
+
+    from apps.core.management.commands.reconcile_payments import Command as ReconcileCommand
+
+    cmd = ReconcileCommand()
+    cmd._apply_result(payment, {"status": "failed", "event": "charge.failed", "provider": ""})
+    payment.refresh_from_db()
+    assert payment.status == Payment.Status.FAILED
+    assert payment.provider_event == "charge.failed"
+
+
+@pytest.mark.django_db
+def test_reconcile_captures_settlement_details(student_user):
+    payment = _create_pending_trip_payment(student_user, reference="reconcile-settle-1")
+
+    from apps.core.management.commands.reconcile_payments import Command as ReconcileCommand
+
+    cmd = ReconcileCommand()
+    cmd._apply_result(
+        payment,
+        {"status": "success", "event": "charge.success", "provider": "paystack", "settlement_reference": "settle-9"},
+    )
+    payment.refresh_from_db()
+    assert payment.settlement_reference == "settle-9"
+    assert payment.reconciled_at is not None
+    assert payment.provider_event == "charge.success"
+
+
+# --------------------------------------------------------------------------
+# Paystack provider (external calls mocked)
+# --------------------------------------------------------------------------
+def test_paystack_refund_builds_correct_payload():
+    from types import SimpleNamespace
+
+    payment = SimpleNamespace(pk=1, provider_reference="paystack-ref-1", currency="NGN")
+    provider = PaystackProvider("sk-test", "wh-secret")
+
+    captured = {}
+
+    def fake_api_post(url, payload):
+        captured["url"] = url
+        captured["payload"] = payload
+        return {"status": True, "data": {"reference": "py-1", "status": "success"}}
+
+    provider._api_post = fake_api_post
+    result = provider.refund(payment, 50)
+
+    assert captured["url"] == "https://api.paystack.co/transaction/refund"
+    assert captured["payload"]["transaction"] == payment.provider_reference
+    assert captured["payload"]["amount"] == 5000  # kobo
+    assert result["reference"] == "py-1"
+    assert result["status"] == "SUCCESS"
+
+
+def test_paystack_verify_transaction_normalizes_response():
+    provider = PaystackProvider("sk-test", "wh-secret")
+    provider._api_get = lambda url: {
+        "status": True,
+        "data": {
+            "status": "success",
+            "settlement_reference": "settle-42",
+            "timeline": [{"event": "Charge Success"}],
+        },
+    }
+    result = provider.verify_transaction("paystack-123")
+    assert result["status"] == "SUCCESS"
+    assert result["settlement_reference"] == "settle-42"
+    assert result["event"] == "Charge Success"
+
+
+# --------------------------------------------------------------------------
+# Pagination
+# --------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_payments_list_is_paginated(student_user, student_client):
+    for idx in range(3):
+        _create_pending_trip_payment(student_user, reference=f"page-{idx}")
+
+    response = student_client.get(PAYMENTS_URL)
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["count"] == 3
+    assert len(body["results"]) == 3
+    assert {"id", "status", "kind", "amount", "refunded_amount"} <= set(body["results"][0].keys())

@@ -10,7 +10,11 @@ The TransitX backend is implemented as a modular Django monolith for a student t
 
 The backend is currently suitable as a tested MVP foundation with a new security and payment hardening layer. It is not yet production-complete because route-specific driver matching, frontend contract alignment, payment reconciliation and refunds, operational hardening, and production deployment validation remain outstanding.
 
-The latest relevant backend validation completed successfully with **46 tests passing** before the latest hardening changes. The latest hardening release adds further security, payment, concurrency, deployment, and regression coverage; the exact post-change test result should be recorded after the full suite is run.
+The backend validates with **121 tests collected, 118 passing, 3 skipped on
+SQLite** (the 3 skips are the PostgreSQL-only concurrency tests, which run in
+CI against a real PostgreSQL container). See the addendum at the bottom for the
+production-hardening release that adds refunds, reconciliation, monitoring,
+backups, CI, and the finalized API contract.
 
 ## 2. Architecture
 
@@ -450,3 +454,121 @@ This section documents only the changes introduced after the previous implementa
 - Payment refunds, settlement reconciliation, provider retry queues, and buyout completion/dispatch are still outstanding.
 - Logout does not yet use a JWT blacklist; password changes invalidate tokens through the password-version claim.
 - The full production stack still needs PostgreSQL, Redis, Celery, HTTPS, monitoring, backup/restore, load, and rollback validation.
+
+---
+
+## Addendum — Production hardening release (2026-09-24)
+
+This release closes the outstanding items from the security/payment hardening
+layer and adds the operational layer required to run in production.
+
+### Monitoring, logging, error tracking, alerting
+
+- New `config/middleware.py` `RequestLogMiddleware`: adds/echoes a correlation
+  `X-Request-ID`, emits one structured JSON access-log line per request
+  (method, path, status, latency, user, request_id), and never logs bodies,
+  query strings, credentials, or JWT headers.
+- New `config/monitoring.py`: thread-safe `Emissions` counters and a
+  best-effort `AlertNotifier` that dispatches to a webhook
+  (`ALERT_WEBHOOK_URL`) and/or email (`ALERT_EMAILS`) without ever failing the
+  request path.
+- New `config/error_tracking.py`: Sentry init/capture behind `SENTRY_DSN`;
+  clean no-op without it. Unhandled API exceptions are captured automatically
+  and returned as opaque `500 SERVER_ERROR`.
+- `config/logging_conf.py`: JSON formatter annotates every record with
+  service/environment/request_id; dedicated loggers for request/tasks/errors/
+  audit/monitor.
+- Periodic `collect_metrics` beat task snapshots counters; a `worker-heartbeat`
+  task keeps presence data in Redis (used by `/api/v1/health/ready/`).
+
+### Database backups & restore testing
+
+- `python manage.py backup_db` — `pg_dump --format=custom` for PostgreSQL, the
+  `sqlite3` backup API for SQLite; writes into `BACKUP_DIR` (git-ignored).
+- `python manage.py restore_db --input <file> [--target ...] [--yes]` —
+  `pg_restore --clean --if-exists` / SQLite `backup()`, refusing destructive
+  overwrites without confirmation.
+- Tested with a SQLite round-trip and an overwrite-refusal test.
+
+### Payments: webhooks, refunds, reconciliation
+
+- Added `Refund` ledger model and payment reconciliation fields
+  (`settlement_reference`, `provider_event`, `reconciled_at`,
+  `refunded_amount`, `refunded_at`) with DB constraints
+  (`amount > 0`, `seats > 0`, `0 <= refunded_amount <= amount`).
+- `POST /api/v1/payments/{id}/refund/` — payer refunds a `SUCCESSFUL` payment
+  up to the outstanding balance; over-refund is rejected; provider errors are
+  surfaced as `502 PAYMENT_PROVIDER_ERROR`.
+- Refund webhook events (`*refund*`) confirm PENDING refunds and update the
+  ledger; unknown references return `404`.
+- `manage.py reconcile_payments` / beat task `payments.reconcile` calls the
+  provider's `verify_transaction` (Paystack) and aligns local state: confirm
+  `PENDING` ? `SUCCESSFUL`, mark provider failures `FAILED`, capture settlement
+  references. Verified locally against the manual provider.
+
+### Notification & Celery task reliability
+
+- `create_notification` retries with exponential backoff
+  (autoretry, ~1 h horizon) and sets `is_sent`/`sent_at`; duplicates are
+  collapsed via `get_or_create`.
+- `retry_undelivered` beat task re-drives notifications the worker never
+  finished dispatching (self-healing delivery loop).
+- Celery durability settings enabled in production (`acks_late`,
+  `reject_on_worker_lost`, etc.); worker task success/failure signals maintain
+  the monitoring counters.
+
+### Pagination & query optimization
+
+- Shared `config.pagination.py` envelope `{count, page, page_size, results}`
+  used by every list endpoint; `page_size` capped at 100.
+- All list views now `select_related`/`prefetch_related`; model indexes added
+  for group route/creator, trip status/route/driver/creator, membership user,
+  notification read/sent, payment payer/status.
+- Light load smoke tests (`mark=load`) guard against pagination/perf
+  regressions; a standalone `scripts/loadtest.py` hits a running deployment.
+
+### Validation contracts
+
+- Fares: `>= 0.01` at API and DB level (was `>= 0`).
+- Coordinates: WGS84 WGS84 range constraints (`lat ? [-90,90]`,
+  `lng ? [-180,180]`) at API and DB for groups and trips; pairs must be
+  provided together.
+- Seats/capacity: group capacity `1..12`; member seats `1..12`; buyout seats
+  bounded by remaining capacity.
+- Trip states: transition guard (`can_transition_to`) enforced in the status
+  view; ratings `1..5` DB-checked and single-per-rater (`DUPLICATE` 409).
+
+### API versioning & contract
+
+- Versioned namespace `/api/v1/...`; finalized `API_CONTRACT.md` documents the
+  error envelope (with `request_id` + optional `errors`), pagination envelope,
+  idempotency keys, webhook semantics, rate limiting, and the full endpoint
+  catalog.
+- drf-spectacular `VERSION=1.0.0`, schema tags plus openapi override.
+
+### CI (`.github/workflows/ci.yml`)
+
+- Tests: Django checks, `makemigrations --check --dry-run`, `check --deploy`,
+  full pytest (SQLite), ruff lint + format, bandit (fail on medium+), a
+  secret/backup-file scan, and concurrency+integration tests against a
+  PostgreSQL 16 service container.
+
+### Now implemented (previously outstanding)
+
+- Trip ratings/comments — implemented with single-rate enforcement. ?
+- Payment refunds — implemented (API + provider + webhooks). ?
+- Settlement reconciliation — implemented (`reconcile_payments` + beat). ?
+- Buyout completion/dispatch — buyouts create server-priced intents confirmed
+  via the payment webhook (committed-trip protection + single-active-intent
+  guard). ?
+- Monitoring, backup/restore, load smoke tests, and concurrency tests on
+  PostgreSQL. ?
+
+### Remaining (tracked, non-blocking)
+
+- Push/email delivery channel for notifications (records + retries are in
+  place; the channel send is a future integration).
+- Paystack end-to-end verification against a staging account.
+- Postgres-backed restore drill and raw rollback validation on staging.
+- JWT token blacklist on logout (password-version invalidation covers the
+  critical path today).

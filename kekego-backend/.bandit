@@ -1,0 +1,6 @@
+# Bandit security checks (used by CI).
+# Scope: Python security linting; only MEDIUM+ severity fails the build.
+[BANDIT]
+skips: B101
+exclude_dirs: migrations, .venv, venv, .git
+severity_level: medium

@@ -1,6 +1,13 @@
 from django.urls import path
 
-from apps.groups.views import GroupBuyoutView, GroupCancelView, GroupJoinView, GroupLeaveView, GroupListView, StudentOnlyPingView
+from apps.groups.views import (
+    GroupBuyoutView,
+    GroupCancelView,
+    GroupJoinView,
+    GroupLeaveView,
+    GroupListView,
+    StudentOnlyPingView,
+)
 
 urlpatterns = [
     path("", GroupListView.as_view(), name="groups-list"),

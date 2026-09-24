@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PYTHON_VERSION: "3.13"
+  DJANGO_SETTINGS_MODULE: config.settings.test
+
+jobs:
+  test:
+    name: Tests and migrations
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kekego-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: kekego-backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Django system checks
+        run: python manage.py check --settings=config.settings.test
+
+      - name: No pending migrations
+        # Fails when models changed but no migration was generated.
+        run: python manage.py makemigrations --check --dry-run --settings=config.settings.test
+
+      - name: Production deploy checks
+        # Django's built-in security check: warns on insecure production settings.
+        run: python manage.py check --deploy --settings=config.settings.production
+        env:
+          DJANGO_SECRET_KEY: ci-only-non-secret-key
+          DJANGO_ALLOWED_HOSTS: api.example.com
+          PAYMENT_PROVIDER: manual
+          DATABASE_URL: postgres://ci:ci@localhost:5432/campus_keke
+          DJANGO_ENABLE_API_DOCS: "False"
+
+      - name: Run tests
+        run: python -m pytest -q
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kekego-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install ruff
+        run: pip install "ruff>=0.11,<1"
+      - name: Ruff lint
+        run: ruff check apps config tests
+      - name: Ruff format check
+        run: ruff format --check apps config tests
+
+  security:
+    name: Security (bandit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kekego-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install bandit
+        run: pip install "bandit>=1.8,<2"
+      - name: Bandit scan (fail on medium+ severity)
+        run: bandit -r apps config --severity-level medium
+
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject accidentally committed .env or backups
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|backups/'; then echo "Secrets/backups must never be committed."; exit 1; fi
+          echo "No secrets or backups tracked."
+
+  integration:
+    name: Integration tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: campus_keke
+          POSTGRES_USER: campus_keke
+          POSTGRES_PASSWORD: campus_keke_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campus_keke -d campus_keke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: kekego-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run concurrency + integration tests against PostgreSQL
+        run: python -m pytest -q -m "concurrency or integration" -p no:cacheprovider
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+          DATABASE_URL: postgres://campus_keke:campus_keke_dev_password@localhost:5432/campus_keke

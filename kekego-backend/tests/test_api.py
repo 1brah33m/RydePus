@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from django.conf import settings
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -62,7 +61,7 @@ def test_unknown_route_uses_consistent_error_format(api_client):
 
 
 def _production_import_code(overrides):
-    env_lines = "\n".join(f'    {key!r}: {value!r},' for key, value in overrides.items())
+    env_lines = "\n".join(f"    {key!r}: {value!r}," for key, value in overrides.items())
     return "\n".join(
         [
             "import os",

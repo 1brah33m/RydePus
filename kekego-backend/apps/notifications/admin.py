@@ -1,7 +1,13 @@
 from django.contrib import admin
 
+from apps.notifications.models import Notification
 
+
+@admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    """Notification app admin placeholder; real models arrive later."""
+    """Admin management for user notifications."""
 
-    pass
+    list_display = ("id", "user", "notification_type", "is_read", "is_sent", "created_at")
+    list_filter = ("notification_type", "is_read", "is_sent", "created_at")
+    search_fields = ("user__email", "title", "message")
+    readonly_fields = ("created_at", "updated_at")

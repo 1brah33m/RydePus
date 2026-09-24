@@ -33,6 +33,10 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # Keep test output quiet.
 LOGGING["root"]["level"] = "WARNING"
 LOGGING["loggers"]["campus_keke"]["level"] = "WARNING"
+LOGGING["loggers"]["campus_keke.request"]["level"] = "ERROR"
+LOGGING["loggers"]["campus_keke.monitor"]["level"] = "ERROR"
+
+REDIS_REQUIRED = False
 
 # Literal marker so linters/IDEs do not think the import is unused.
 _ = (BASE_DIR, env)

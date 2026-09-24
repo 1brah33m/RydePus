@@ -1,7 +1,7 @@
 """Development settings: relaxed security, permissive CORS, SQLite fallback."""
 
 from .base import *  # noqa: F401, F403
-from .base import BASE_DIR, env, resolve_databases
+from .base import BASE_DIR, resolve_databases
 
 DEBUG = True
 

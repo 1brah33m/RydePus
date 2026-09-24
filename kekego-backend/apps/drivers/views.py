@@ -4,7 +4,6 @@ from rest_framework.views import APIView
 
 from apps.drivers.models import DriverProfile
 from apps.users.permissions import IsVerifiedDriver
-from apps.users.serializers import UserSerializer
 
 
 class DriverProfileSerializer(serializers.ModelSerializer):
@@ -91,7 +90,9 @@ class DriverAvailabilityView(APIView):
 
     def patch(self, request):
         profile, _ = DriverProfile.objects.get_or_create(user=request.user)
-        serializer = DriverAvailabilitySerializer(profile, data=request.data, partial=True, context={"request": request})
+        serializer = DriverAvailabilitySerializer(
+            profile, data=request.data, partial=True, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(DriverProfileSerializer(profile).data, status=status.HTTP_200_OK)

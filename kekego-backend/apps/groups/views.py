@@ -1,8 +1,8 @@
 import logging
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.conf import settings
-from django.db import transaction, IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,8 +12,37 @@ from apps.payments.models import Payment
 from apps.payments.providers import PaymentProviderError, initialize_payment
 from apps.trips.models import Trip
 from apps.users.permissions import IsStudent
+from config.pagination import paginate
 
 logger = logging.getLogger("campus_keke.audit")
+
+MAX_GROUP_CAPACITY = 12
+
+
+class CoordinateField(serializers.DecimalField):
+    """Optional WGS84 coordinate validated against its real-world range."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("max_digits", 9)
+        kwargs.setdefault("decimal_places", 6)
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(*args, **kwargs)
+
+
+def coordinate_pair(lat_field: str, lng_field: str, *, lat, lng):
+    """Validate that both halves of a coordinate pair travel together."""
+
+
+def validate_coordinate_pair(attrs, prefix: str, errors: dict) -> None:
+    lat = attrs.get(f"{prefix}_lat")
+    lng = attrs.get(f"{prefix}_lng")
+    if (lat is None) != (lng is None):
+        errors[f"{prefix}_lng"] = "latitude and longitude must be provided together."
+    if lat is not None and not (-90 <= lat <= 90):
+        errors[f"{prefix}_lat"] = "latitude must be between -90 and 90."
+    if lng is not None and not (-180 <= lng <= 180):
+        errors[f"{prefix}_lng"] = "longitude must be between -180 and 180."
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -28,6 +57,10 @@ class GroupSerializer(serializers.ModelSerializer):
             "name",
             "pickup_location",
             "destination",
+            "pickup_lat",
+            "pickup_lng",
+            "destination_lat",
+            "destination_lng",
             "capacity",
             "member_count",
             "created_by",
@@ -43,9 +76,52 @@ class GroupSerializer(serializers.ModelSerializer):
 class GroupCreateSerializer(serializers.ModelSerializer):
     """Create a group and add the creator as the first member."""
 
+    pickup_lat = CoordinateField()
+    pickup_lng = CoordinateField()
+    destination_lat = CoordinateField()
+    destination_lng = CoordinateField()
+    capacity = serializers.IntegerField(min_value=1, max_value=MAX_GROUP_CAPACITY)
+
     class Meta:
         model = Group
-        fields = ("name", "pickup_location", "destination", "capacity")
+        fields = (
+            "name",
+            "pickup_location",
+            "destination",
+            "pickup_lat",
+            "pickup_lng",
+            "destination_lat",
+            "destination_lng",
+            "capacity",
+        )
+
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("name is required.")
+        return value
+
+    def validate_pickup_location(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("pickup_location is required.")
+        return value
+
+    def validate_destination(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("destination is required.")
+        return value
+
+    def validate(self, attrs):
+        errors: dict = {}
+        if not attrs.get("capacity") or not 1 <= attrs["capacity"] <= MAX_GROUP_CAPACITY:
+            errors["capacity"] = f"capacity must be between 1 and {MAX_GROUP_CAPACITY}."
+        validate_coordinate_pair(attrs, "pickup", errors)
+        validate_coordinate_pair(attrs, "destination", errors)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
 
     def create(self, validated_data):
         user = self.context["request"].user
@@ -58,9 +134,8 @@ class GroupListView(APIView):
     permission_classes = [IsStudent]
 
     def get(self, request):
-        groups = Group.objects.all()
-        serializer = GroupSerializer(groups, many=True)
-        return Response(serializer.data)
+        groups = Group.objects.all().select_related("created_by").prefetch_related("members")
+        return paginate(groups, request, GroupSerializer)
 
     def post(self, request):
         serializer = GroupCreateSerializer(data=request.data, context={"request": request})
@@ -84,23 +159,37 @@ class GroupJoinView(APIView):
             try:
                 group = Group.objects.select_for_update().get(pk=group_id)
             except Group.DoesNotExist:
-                return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND
+                )
 
             if group.members.filter(user=request.user).exists():
-                return Response({"error": {"code": "INVALID", "message": "You already joined this group."}}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": {"code": "INVALID", "message": "You already joined this group."}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             if group.member_count >= group.capacity:
-                return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": {"code": "INVALID", "message": "This group is already at capacity."}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             seat = GroupMember.next_free_seat(group, group.capacity)
             if seat is None:
-                return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": {"code": "INVALID", "message": "This group is already at capacity."}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             try:
                 GroupMember.objects.create(group=group, user=request.user, seat=seat)
             except IntegrityError:
                 # Another request claimed the same seat under concurrency.
-                return Response({"error": {"code": "INVALID", "message": "This group filled up while joining. Try again."}}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": {"code": "INVALID", "message": "This group filled up while joining. Try again."}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         return Response(GroupSerializer(group).data)
 
@@ -115,9 +204,13 @@ class GroupLeaveView(APIView):
             try:
                 group = Group.objects.select_for_update().get(pk=group_id)
             except Group.DoesNotExist:
-                return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND
+                )
 
-            if group.trip_set.filter(status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS, Trip.Status.COMPLETED]).exists():
+            if group.trip_set.filter(
+                status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS, Trip.Status.COMPLETED]
+            ).exists():
                 return Response(
                     {"error": {"code": "INVALID", "message": "You cannot leave a group with a committed trip."}},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -148,9 +241,13 @@ class GroupCancelView(APIView):
             try:
                 group = Group.objects.select_for_update().get(pk=group_id, created_by=request.user)
             except Group.DoesNotExist:
-                return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND
+                )
 
-            if group.trip_set.filter(status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS, Trip.Status.COMPLETED]).exists():
+            if group.trip_set.filter(
+                status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS, Trip.Status.COMPLETED]
+            ).exists():
                 return Response(
                     {"error": {"code": "INVALID", "message": "A group with a committed trip cannot be cancelled."}},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -176,7 +273,9 @@ class GroupBuyoutView(APIView):
             try:
                 group = Group.objects.select_for_update().get(pk=group_id)
             except Group.DoesNotExist:
-                return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND
+                )
 
             if not group.members.filter(user=request.user).exists():
                 return Response(
@@ -184,7 +283,9 @@ class GroupBuyoutView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            if group.trip_set.filter(status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS, Trip.Status.COMPLETED]).exists():
+            if group.trip_set.filter(
+                status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS, Trip.Status.COMPLETED]
+            ).exists():
                 return Response(
                     {"error": {"code": "INVALID", "message": "A group with a committed trip cannot be bought out."}},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -238,7 +339,12 @@ class GroupBuyoutView(APIView):
         except PaymentProviderError as exc:
             logger.warning("buyout_initialization_failed payment_id=%s error=%s", payment.pk, exc)
             return Response(
-                {"error": {"code": "PAYMENT_PROVIDER_ERROR", "message": "Payment could not be initialized with the payment provider."}},
+                {
+                    "error": {
+                        "code": "PAYMENT_PROVIDER_ERROR",
+                        "message": "Payment could not be initialized with the payment provider.",
+                    }
+                },
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 

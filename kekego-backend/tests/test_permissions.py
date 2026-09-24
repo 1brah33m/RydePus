@@ -81,8 +81,9 @@ def test_driver_can_update_availability(driver_client, driver_user):
 
 @pytest.mark.django_db
 def test_permission_classes_work_directly(driver_user):
-    from apps.users.permissions import IsDriver, IsStudent
     from rest_framework.test import APIRequestFactory
+
+    from apps.users.permissions import IsDriver, IsStudent
 
     factory = APIRequestFactory()
 

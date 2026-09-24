@@ -17,7 +17,7 @@ def test_user_can_list_their_notifications(student_user, student_client):
 
     response = student_client.get(NOTIFICATIONS_URL)
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()[0]["title"] == "Trip ready"
+    assert response.json()["results"][0]["title"] == "Trip ready"
 
 
 @pytest.mark.django_db
@@ -40,7 +40,7 @@ def test_user_sees_only_their_notifications(student_user, student_client):
 
     response = student_client.get(NOTIFICATIONS_URL)
     assert response.status_code == status.HTTP_200_OK
-    assert all(item["user"] != other_user.id for item in response.json())
+    assert all(item["user"] != other_user.id for item in response.json()["results"])
 
 
 @pytest.mark.django_db

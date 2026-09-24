@@ -1,9 +1,9 @@
 # Campus Keke — Backend
 
 REST API backend for a campus keke (tricycle) transportation platform for
-students and drivers. This is a **foundation / boilerplate**: the core
-transportation business logic (grouping, matching, payments, trips) will be
-built on top of this structure in later stages.
+students and drivers. Implements ride grouping, trip lifecycle, payments
+(buyouts + refunds + reconciliation), notifications, hardening (monitoring,
+backups, CI), and an OpenAPI-documented contract.
 
 ---
 
@@ -13,10 +13,18 @@ built on top of this structure in later stages.
 - Issues **JWT** access/refresh tokens (`djangorestframework-simplejwt`).
 - Enforces **role-based access** on the server (`STUDENT` / `DRIVER`) — never
   trust the frontend for security.
-- Exposes a health check and self-documenting API (Swagger/Redoc/OpenAPI).
-- Runs background work through **Celery** (Redis as broker).
-- Is production-ready via **Docker Compose** (app + PostgreSQL + Redis +
-  Celery worker).
+- Ride groups with capacity-safe joining + buyout payment intents (server-side
+  pricing).
+- Trip lifecycle: publish → driver discovery → accept → in-progress →
+  complete → one-time rating.
+- Payments via a provider adapter (`manual` dev/test, `paystack` production),
+  verified webhooks, refunds, and a reconciliation job.
+- Notifications delivered through retrying Celery tasks.
+- Exposes liveness + readiness checks and self-documenting API
+  (Swagger/Redoc/OpenAPI).
+- Runs background work through **Celery** (Redis as broker + beat scheduler).
+- Production-ready via **Docker Compose** (app + PostgreSQL + Redis +
+  Celery worker + beat).
 
 ## 2. Technology stack
 
@@ -28,9 +36,12 @@ built on top of this structure in later stages.
 | Docs        | drf-spectacular (OpenAPI 3 + Swagger/Redoc)       |
 | Database    | PostgreSQL (psycopg3)                             |
 | Cache/Broker| Redis (Celery broker + result backend)            |
-| Async tasks | Celery                                            |
+| Async tasks | Celery + beat                                     |
 | Config      | django-environ (`.env`)                           |
-| Tests       | pytest + pytest-django                            |
+| Monitoring  | Structured JSON logs, correlation IDs, counters, alerts |
+| Error track | Sentry (opt-in via `SENTRY_DSN`)                  |
+| Backups     | `manage.py backup_db` / `restore_db`              |
+| Tests       | pytest + pytest-django (CI: ruff, bandit)         |
 | Infra       | Docker, Docker Compose                            |
 
 ## 3. Architecture
@@ -178,6 +189,7 @@ Services:
 - `db` — PostgreSQL 16 on `localhost:5432`
 - `redis` — Redis 7 on `localhost:6379`
 - `worker` — Celery worker
+- `beat` — Celery beat (scheduled cron-style tasks)
 
 The entrypoint waits for PostgreSQL, applies migrations, then starts the app.
 Everything talks over the internal Compose network. Stop everything with
@@ -200,20 +212,24 @@ python manage.py showmigrations   # list applied/unapplied
 python manage.py createsuperuser
 ```
 
-Then go to <http://127.0.0.1:8000/admin/> and log in. Superuser accounts can
-optionally be given a `STUDENT` or `DRIVER` role, but they are recognised by
-their admin flags.
+Then go to <http://127.0.0.1:8000/{DJANGO_ADMIN_URL}/> (default `admin/`) and log
+in. The admin path is configurable so production can be mounted at a
+non-guessable route. Superuser accounts can optionally be given a `STUDENT` or
+`DRIVER` role, but they are recognised by their admin flags.
 
 ## 10. Run tests
 
 ```bash
-python -m pytest
+python -m pytest            # full suite (SQLite, eager Celery, no services)
+python -m pytest -m "concurrency or integration"   # needs Postgres (CI job)
 ```
 
 Tests run against an in-memory SQLite database with Celery in eager mode — no
-external services are required. The suite covers registration, login, refresh,
-`/me/`, role permissions (student-only vs driver-only), unauthorized requests,
-invalid login, the health check, and the error format.
+external services are required. The suite covers auth, role permissions,
+groups, trips, payments (webhooks/refunds/reconciliation), notifications,
+validation contracts, backup/restore, monitoring/alerting, pagination,
+integration flows, and light load smoke tests. Concurrency tests are skipped on
+SQLite (`select_for_update` is a no-op there) and run in CI against PostgreSQL.
 
 ## 11. Start Celery
 
@@ -237,6 +253,9 @@ Expected output: `processed: hello from campus keke`.
 
 Authentication (Bearer JWT) is wired into the schema, and the Swagger UI has
 **Authorize** enabled (`persistAuthorization`).
+
+Docs are **opt-in** through `DJANGO_ENABLE_API_DOCS` (default enabled in
+development only) so a misconfigured deployment never leaks the schema.
 
 ## 13. How authentication works
 
@@ -269,56 +288,74 @@ frontend only *routes* users; the backend enforces.
 > Driver **verification/approval** is not implemented yet — it will be layered
 > on top of DRIVER registrations in a later stage.
 
-## 15. Future architecture: Groups → Trips → Drivers
-
-This is the roadmap the foundation is prepared for. **Nothing here is
-implemented yet.**
+## 15. Groups → Trips → Payments (implemented)
 
 ```
 Student creates/joins a group     1/4  2/4  3/4  4/4
-        (increment member count inside a DB transaction)
+        (joins serialized on a row lock; unique (group,seat) constraint)
                     |
-        group reaches 4/4  OR  a student pays for ALL 4 seats
-                    |
-                    v
-              Group is FULL  ───>  Trip is created
+        group reaches capacity  OR  a student pays for ALL remaining seats
                     |
                     v
-          Driver matching (strict: same pickup + same destination)
+              Group is FULL  ───>  Student publishes a Trip
                     |
                     v
-            Driver accepts the trip
+          Driver discovery (same pickup + destination, strict filters)
                     |
                     v
-              Trip begins  ───>  Trip completes
+            Driver accepts  ──►  starts  ──►  completes
+                    |
+                    v
+          Student pays (provider) ─► confirmed via verified webhook
+                    v
+              Refunds + daily reconciliation + notifications
 ```
 
-### Concurrency safety (design decision)
+### Concurrency safety (implemented)
 
-Joining a group must never produce `5/4`. The future implementation will use:
+- `transaction.atomic()` + `select_for_update()` row locks on group/trip rows,
+- database `CHECK` constraints (capacity ≤ 12, seat ranges, fare/amounts,
+  coordinate ranges), partial unique constraint on `(group, seat)`,
+- unique `(group, user)` membership constraint as a no-race backstop.
 
-- `django.db.transaction.atomic()` blocks,
-- `select_for_update()` row locks on the group,
-- a database `CHECK` constraint / partial unique constraint on capacity,
-- atomic `F()` expressions where appropriate.
-
-PostgreSQL is the source of truth; Redis/`local memory` is never used for
-permanent business state, so multiple Django instances can safely share the
-same database.
+PostgreSQL is the source of truth; Redis is never used for permanent business
+state, so multiple Django instances safely share the same database. Concurrency
+tests run in CI against a real PostgreSQL container.
 
 ## API endpoints (current)
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/health/` | none | Liveness/DB check `{"status":"ok"}` |
+| `GET` | `/api/v1/health/ready/` | none | Readiness (DB + Redis) |
 | `POST` | `/api/v1/auth/register/` | none | Create STUDENT/DRIVER account |
 | `POST` | `/api/v1/auth/login/` | none | Email+password → JWT pair |
 | `POST` | `/api/v1/auth/refresh/` | refresh token | Refresh access token |
-| `GET` | `/api/v1/auth/me/` | Bearer | Current user |
-| `GET` | `/api/v1/drivers/me/` | Bearer + DRIVER | Driver-only exemplar |
-| `GET` | `/api/v1/groups/ping/` | Bearer + STUDENT | Student-only exemplar |
-| `GET` | `/api/docs/`, `/api/redoc/`, `/api/schema/` | none | API docs |
-| `GET/POST` | `/admin/` | Django admin | Staff dashboard |
+| `GET/PATCH` | `/api/v1/auth/me/` | Bearer | Current user |
+| `GET/PATCH` | `/api/v1/drivers/me/` | Bearer + DRIVER | Driver profile/availability |
+| `GET/POST` | `/api/v1/groups/` | Bearer + STUDENT | List (paginated) / create group |
+| `POST` | `/api/v1/groups/{id}/join/` | Bearer + STUDENT | Join group (capacity-safe) |
+| `POST` | `/api/v1/groups/{id}/leave/` | Bearer + STUDENT | Leave group |
+| `POST` | `/api/v1/groups/{id}/cancel/` | Bearer + STUDENT | Cancel uncommitted group |
+| `POST` | `/api/v1/groups/{id}/buyout/` | Bearer + STUDENT | Buyout payment intent |
+| `GET/POST` | `/api/v1/trips/` | Bearer + STUDENT | List (paginated) / create trip |
+| `GET` | `/api/v1/trips/available/` | verified DRIVER | Discover pending trips |
+| `POST` | `/api/v1/trips/{id}/accept/` | verified DRIVER | Accept a trip |
+| `POST` | `/api/v1/trips/{id}/cancel/` | Bearer + STUDENT | Cancel pending trip |
+| `POST` | `/api/v1/trips/{id}/cancel/driver/` | verified DRIVER | Cancel assigned trip |
+| `POST` | `/api/v1/trips/{id}/start/` | verified DRIVER | Start trip |
+| `POST` | `/api/v1/trips/{id}/complete/` | verified DRIVER | Complete trip |
+| `POST` | `/api/v1/trips/{id}/rating/` | participants | Rate completed trip |
+| `GET/POST` | `/api/v1/payments/` | Bearer + STUDENT | List (paginated) / create payment |
+| `POST` | `/api/v1/payments/{id}/refund/` | Bearer + STUDENT | Refund successful payment |
+| `POST` | `/api/v1/payments/webhook/` | provider | Webhook (signature-verified) |
+| `GET` | `/api/v1/notifications/` | Bearer | List notifications |
+| `PATCH` | `/api/v1/notifications/{id}/read/` | Bearer | Mark notification read |
+| `GET` | `/api/docs/`, `/api/redoc/`, `/api/schema/` | none | API docs (opt-in) |
+| `/admin/` | configurable via `DJANGO_ADMIN_URL` | staff | Django admin |
+
+> See `API_CONTRACT.md` for the finalized contract (error codes, pagination
+> envelope, idempotency, webhooks, rate limits).
 
 ## Error format
 
@@ -328,12 +365,34 @@ All errors (4xx/5xx) use one shape:
 {
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "Human readable message"
-  }
+    "message": "Human readable message",
+    "request_id": "a1b2c3d4e5f6a7b8"
+  },
+  "errors": { "field": ["detail"] }   // present only for validation failures
 }
 ```
 
 Internal errors never leak stack traces or secrets to clients; they are
-logged server-side instead. Codes include `AUTHENTICATION_FAILED`,
-`NOT_AUTHENTICATED`, `PERMISSION_DENIED`, `NOT_FOUND`, `VALIDATION_ERROR`,
-`METHOD_NOT_ALLOWED`, `THROTTLED`, and `SERVER_ERROR`.
+logged server-side (and sent to Sentry when configured). Codes include
+`NOT_AUTHENTICATED`, `AUTHENTICATION_FAILED`, `PERMISSION_DENIED`,
+`NOT_FOUND`, `VALIDATION_ERROR`, `INVALID`, `INVALID_STATE`, `DUPLICATE`,
+`INVALID_SIGNATURE`, `PAYMENT_PROVIDER_ERROR`, `THROTTLED`, `SERVER_ERROR`.
+
+## Operations
+
+- **Backups:** `python manage.py backup_db` (pg_dump custom format / SQLite
+  backup) and `python manage.py restore_db --input <file>`.
+- **Reconciliation:** `python manage.py reconcile_payments` (or Celery beat
+  `payments.reconcile` every hour) syncs provider truth back to local state.
+- **Metrics:** `python manage.py collect_metrics` snapshots in-process counters.
+- **Alerts:** set `ALERT_WEBHOOK_URL` / `ALERT_EMAILS`; the notifier is
+  best-effort and never fails the request path.
+- **Admin path:** `DJANGO_ADMIN_URL` (default `admin`) hides `/admin/` at a
+  non-guessable route in production.
+
+## CI
+
+`.github/workflows/ci.yml` runs: Django checks, migration freshness
+(`makemigrations --check`), `check --deploy` security scan, the full pytest
+suite (SQLite), ruff lint + format, bandit (medium+), secret-file scanning,
+and the concurrency/integration suite against a PostgreSQL 16 container.
