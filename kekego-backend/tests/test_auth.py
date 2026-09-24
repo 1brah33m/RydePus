@@ -174,3 +174,78 @@ def test_access_token_authenticates_api_call(api_client, student_user):
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
     response = client.get(ME_URL)
     assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+def test_old_access_token_is_invalid_after_password_change(api_client, student_user):
+    login = api_client.post(
+        LOGIN_URL,
+        {"email": student_user.email, "password": "StrongPass123!"},
+        format="json",
+    )
+    old_access = login.json()["access"]
+
+    change_client = APIClient()
+    change_client.force_authenticate(student_user)
+    changed = change_client.post(
+        "/api/v1/auth/change-password/",
+        {"old_password": "StrongPass123!", "new_password": "NewStrongPass456!"},
+        format="json",
+    )
+    assert changed.status_code == status.HTTP_200_OK
+
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {old_access}")
+    assert client.get(ME_URL).status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_old_refresh_token_is_invalid_after_password_change(api_client, student_user):
+    login = api_client.post(
+        LOGIN_URL,
+        {"email": student_user.email, "password": "StrongPass123!"},
+        format="json",
+    )
+    old_refresh = login.json()["refresh"]
+
+    change_client = APIClient()
+    change_client.force_authenticate(student_user)
+    change_client.post(
+        "/api/v1/auth/change-password/",
+        {"old_password": "StrongPass123!", "new_password": "NewStrongPass456!"},
+        format="json",
+    )
+
+    refused = APIClient().post(REFRESH_URL, {"refresh": old_refresh}, format="json")
+    assert refused.status_code == status.HTTP_401_UNAUTHORIZED
+
+    refreshed_login = APIClient().post(
+        LOGIN_URL,
+        {"email": student_user.email, "password": "NewStrongPass456!"},
+        format="json",
+    )
+    assert refreshed_login.status_code == status.HTTP_200_OK
+    new_access = refreshed_login.json()["access"]
+
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {new_access}")
+    assert client.get(ME_URL).status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+def test_driver_registration_creates_unverified_profile(api_client):
+    from apps.drivers.models import DriverProfile
+
+    response = api_client.post(
+        REGISTER_URL,
+        {
+            "email": "newdriver@example.com",
+            "password": "StrongPass123!",
+            "role": "DRIVER",
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    profile = DriverProfile.objects.get(user__email="newdriver@example.com")
+    assert profile.is_verified is False
+    assert profile.availability_status == DriverProfile.AvailabilityStatus.OFFLINE

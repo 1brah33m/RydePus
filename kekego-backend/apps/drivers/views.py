@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.drivers.models import DriverProfile
-from apps.users.permissions import IsDriver
+from apps.users.permissions import IsVerifiedDriver
 from apps.users.serializers import UserSerializer
 
 
@@ -27,6 +27,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "full_name",
             "phone_number",
             "role",
+            "is_verified",
             "availability_status",
             "vehicle_type",
             "vehicle_plate",
@@ -43,17 +44,40 @@ class DriverProfileSerializer(serializers.ModelSerializer):
 
 
 class DriverAvailabilitySerializer(serializers.ModelSerializer):
-    """Update a driver's availability state."""
+    """Update a driver's availability state with transition enforcement.
+
+    ``BUSY`` cannot be requested (the backend sets it when a trip is accepted
+    and clears it when the trip is completed/cancelled), and drivers with a
+    running trip cannot flip their availability manually.
+    """
 
     class Meta:
         model = DriverProfile
         fields = ("availability_status", "preferred_pickup_location", "preferred_destination")
 
+    def validate_availability_status(self, value):
+        profile = self.instance
+        user = self.context["request"].user
+
+        if value == DriverProfile.AvailabilityStatus.BUSY:
+            raise serializers.ValidationError(
+                {"availability_status": "BUSY is set automatically while a trip is in progress."}
+            )
+        if user.assigned_trips.filter(status__in=["ACCEPTED", "IN_PROGRESS"]).exists():
+            raise serializers.ValidationError(
+                {"availability_status": "Complete or cancel your active trip before changing availability."}
+            )
+        if not profile.can_transition_to(value):
+            raise serializers.ValidationError(
+                {"availability_status": f"Cannot change availability from {profile.availability_status} to {value}."}
+            )
+        return value
+
 
 class DriverMeView(APIView):
-    """GET /api/v1/drivers/me/ - driver-only profile data."""
+    """GET /api/v1/drivers/me/ - verified-driver profile data."""
 
-    permission_classes = [IsDriver]
+    permission_classes = [IsVerifiedDriver]
 
     def get(self, request):
         profile, _ = DriverProfile.objects.get_or_create(user=request.user)
@@ -61,13 +85,13 @@ class DriverMeView(APIView):
 
 
 class DriverAvailabilityView(APIView):
-    """PATCH /api/v1/drivers/availability/ - update online/offline/busy state."""
+    """PATCH /api/v1/drivers/availability/ - update online/offline state."""
 
-    permission_classes = [IsDriver]
+    permission_classes = [IsVerifiedDriver]
 
     def patch(self, request):
         profile, _ = DriverProfile.objects.get_or_create(user=request.user)
-        serializer = DriverAvailabilitySerializer(profile, data=request.data, partial=True)
+        serializer = DriverAvailabilitySerializer(profile, data=request.data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(DriverProfileSerializer(profile).data, status=status.HTTP_200_OK)

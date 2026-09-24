@@ -31,6 +31,7 @@ services:
     env_file:
       - .env
     environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
       DATABASE_HOST: db
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -49,6 +50,7 @@ services:
     env_file:
       - .env
     environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
       DATABASE_HOST: db
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0

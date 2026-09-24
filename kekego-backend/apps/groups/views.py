@@ -1,14 +1,19 @@
+import logging
 from decimal import Decimal, InvalidOperation
 
-from django.db import transaction
+from django.conf import settings
+from django.db import transaction, IntegrityError
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.groups.models import Group, GroupMember
 from apps.payments.models import Payment
+from apps.payments.providers import PaymentProviderError, initialize_payment
 from apps.trips.models import Trip
 from apps.users.permissions import IsStudent
+
+logger = logging.getLogger("campus_keke.audit")
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -65,23 +70,38 @@ class GroupListView(APIView):
 
 
 class GroupJoinView(APIView):
-    """POST /api/v1/groups/{id}/join/ - join a group as a student."""
+    """POST /api/v1/groups/{id}/join/ - join a group as a student.
+
+    Capacity is enforced inside a "SELECT ... FOR UPDATE" on the group row so
+    concurrent joins serialize, and the unique ``(group, seat)`` constraint is
+    a database-level backstop for the check-then-insert window.
+    """
 
     permission_classes = [IsStudent]
 
     def post(self, request, group_id):
-        try:
-            group = Group.objects.get(pk=group_id)
-        except Group.DoesNotExist:
-            return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            try:
+                group = Group.objects.select_for_update().get(pk=group_id)
+            except Group.DoesNotExist:
+                return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
 
-        if group.members.filter(user=request.user).exists():
-            return Response({"error": {"code": "INVALID", "message": "You already joined this group."}}, status=status.HTTP_400_BAD_REQUEST)
+            if group.members.filter(user=request.user).exists():
+                return Response({"error": {"code": "INVALID", "message": "You already joined this group."}}, status=status.HTTP_400_BAD_REQUEST)
 
-        if group.member_count >= group.capacity:
-            return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
+            if group.member_count >= group.capacity:
+                return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
 
-        GroupMember.objects.create(group=group, user=request.user)
+            seat = GroupMember.next_free_seat(group, group.capacity)
+            if seat is None:
+                return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                GroupMember.objects.create(group=group, user=request.user, seat=seat)
+            except IntegrityError:
+                # Another request claimed the same seat under concurrency.
+                return Response({"error": {"code": "INVALID", "message": "This group filled up while joining. Try again."}}, status=status.HTTP_400_BAD_REQUEST)
+
         return Response(GroupSerializer(group).data)
 
 
@@ -143,7 +163,11 @@ class GroupCancelView(APIView):
 
 
 class GroupBuyoutView(APIView):
-    """POST /api/v1/groups/{id}/buyout/ - create a pending buyout payment intent."""
+    """POST /api/v1/groups/{id}/buyout/ - create a pending buyout payment intent.
+
+    The amount is derived server-side (``seats * GROUP_SEAT_FARE``); the
+    client-supplied figure is ignored so nobody can price their own payment.
+    """
 
     permission_classes = [IsStudent]
 
@@ -168,10 +192,9 @@ class GroupBuyoutView(APIView):
 
             try:
                 seats = int(request.data.get("seats", 0))
-                amount = request.data["amount"]
-            except (TypeError, ValueError, KeyError):
+            except (TypeError, ValueError):
                 return Response(
-                    {"error": {"code": "INVALID", "message": "seats and amount are required."}},
+                    {"error": {"code": "INVALID", "message": "seats is required."}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -182,15 +205,13 @@ class GroupBuyoutView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            try:
-                amount_value = Decimal(str(amount))
-            except (InvalidOperation, TypeError, ValueError):
-                amount_value = Decimal("0")
-            if amount_value <= 0:
+            per_seat = Decimal(str(settings.GROUP_SEAT_FARE))
+            if per_seat <= 0:
                 return Response(
-                    {"error": {"code": "INVALID", "message": "Amount must be greater than zero."}},
+                    {"error": {"code": "INVALID", "message": "Buyout pricing is not configured."}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            amount = per_seat * seats
 
             if Payment.objects.filter(
                 group=group,
@@ -210,6 +231,15 @@ class GroupBuyoutView(APIView):
                 currency=request.data.get("currency", "NGN"),
                 seats=seats,
                 kind=Payment.Kind.GROUP_BUYOUT,
+            )
+
+        try:
+            initialize_payment(payment)
+        except PaymentProviderError as exc:
+            logger.warning("buyout_initialization_failed payment_id=%s error=%s", payment.pk, exc)
+            return Response(
+                {"error": {"code": "PAYMENT_PROVIDER_ERROR", "message": "Payment could not be initialized with the payment provider."}},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
 
         from apps.payments.views import PaymentSerializer

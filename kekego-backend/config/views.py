@@ -26,9 +26,11 @@ class HealthView(APIView):
         try:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
-        except Exception as exc:  # pragma: no cover - depends on infra health
+        except Exception:
+            # Never leak database driver details to unauthenticated callers.
+            logger.exception("Health check database probe failed")
             return Response(
-                {"status": "error", "detail": "database unavailable", "message": str(exc)},
+                {"status": "error", "detail": "database unavailable"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response({"status": "ok"})

@@ -32,6 +32,19 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1,testserver").split(",") if h.strip()]
 
+
+def resolve_allowed_hosts(*, required: bool) -> list[str]:
+    """Parse ``DJANGO_ALLOWED_HOSTS`` into a list.
+
+    When ``required`` is True (production) an empty value is a hard
+    configuration error so deployments fail fast instead of serving under a
+    misleading default.
+    """
+    hosts = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", default="").split(",") if h.strip()]
+    if required and not hosts:
+        raise ImproperlyConfigured("Production requires DJANGO_ALLOWED_HOSTS to be set.")
+    return hosts
+
 # ---------------------------------------------------------------------------
 # Applications
 # ---------------------------------------------------------------------------
@@ -147,7 +160,7 @@ AUTHENTICATION_BACKENDS = [
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.users.authentication.PasswordAwareJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -206,6 +219,23 @@ CORS_ALLOWED_ORIGINS = [
     for o in env("DJANGO_CORS_ALLOWED_ORIGINS", default="").split(",")
     if o.strip()
 ]
+
+# ---------------------------------------------------------------------------
+# Payments
+# ---------------------------------------------------------------------------
+# ``manual`` records intents without talking to a provider (dev/tests only).
+# Production defaults to ``paystack`` (see ``config.settings.production``).
+PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="manual")
+PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
+PAYSTACK_WEBHOOK_SECRET = env("PAYSTACK_WEBHOOK_SECRET", default="")
+# Server-side unit price used to price group buyouts. Buyout amounts are never
+# accepted from the client; a zero value disables buyouts until configured.
+GROUP_SEAT_FARE = env.float("GROUP_SEAT_FARE", default=0)
+
+# ---------------------------------------------------------------------------
+# API documentation (schema/Swagger/Redoc). Off by default in production.
+# ---------------------------------------------------------------------------
+ENABLE_API_DOCS = False
 
 # ---------------------------------------------------------------------------
 # Redis / Celery

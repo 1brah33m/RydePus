@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from apps.drivers.models import DriverProfile
 from apps.trips.models import Trip, TripRating
-from apps.users.permissions import IsDriver, IsStudent
+from apps.users.permissions import IsStudent, IsVerifiedDriver
 
 logger = logging.getLogger("campus_keke.audit")
 
@@ -108,7 +108,7 @@ class TripListCreateView(APIView):
 class AvailableTripListView(APIView):
     """GET /api/v1/trips/available/ - list pending trips for online drivers."""
 
-    permission_classes = [IsDriver]
+    permission_classes = [IsVerifiedDriver]
 
     def get(self, request):
         profile, _ = DriverProfile.objects.get_or_create(user=request.user)
@@ -147,7 +147,7 @@ class AvailableTripListView(APIView):
 class TripAcceptView(APIView):
     """POST /api/v1/trips/{id}/accept/ - driver accepts a pending trip."""
 
-    permission_classes = [IsDriver]
+    permission_classes = [IsVerifiedDriver]
 
     def post(self, request, trip_id):
         profile, _ = DriverProfile.objects.get_or_create(user=request.user)
@@ -203,7 +203,7 @@ class StudentTripCancelView(APIView):
 class DriverTripCancelView(APIView):
     """POST /api/v1/trips/{id}/cancel/driver/ - assigned driver cancels an accepted/in-progress trip."""
 
-    permission_classes = [IsDriver]
+    permission_classes = [IsVerifiedDriver]
 
     def post(self, request, trip_id):
         with transaction.atomic():
@@ -237,13 +237,16 @@ class DriverTripCancelView(APIView):
 class TripStatusUpdateView(APIView):
     """POST /api/v1/trips/{id}/start/ or /complete/ - progress a trip status."""
 
-    permission_classes = [IsDriver]
+    permission_classes = [IsVerifiedDriver]
 
     def post(self, request, trip_id, action):
         try:
             trip = Trip.objects.get(pk=trip_id)
         except Trip.DoesNotExist:
             return Response({"error": {"code": "NOT_FOUND", "message": "Trip not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        if trip.driver_id != request.user.id:
+            return Response({"error": {"code": "INVALID", "message": "This trip is not assigned to you."}}, status=status.HTTP_400_BAD_REQUEST)
 
         status_map = {
             "start": Trip.Status.IN_PROGRESS,
@@ -254,12 +257,25 @@ class TripStatusUpdateView(APIView):
         if new_status is None:
             return Response({"error": {"code": "INVALID", "message": "Unsupported action."}}, status=status.HTTP_400_BAD_REQUEST)
 
-        if trip.driver_id != request.user.id:
-            return Response({"error": {"code": "INVALID", "message": "This trip is not assigned to you."}}, status=status.HTTP_400_BAD_REQUEST)
-
         if not trip.can_transition_to(new_status):
             return Response({"error": {"code": "INVALID", "message": "This status change is not allowed."}}, status=status.HTTP_400_BAD_REQUEST)
 
-        trip.status = new_status
-        trip.save(update_fields=["status", "updated_at"])
+        with transaction.atomic():
+            try:
+                trip = Trip.objects.select_for_update().get(pk=trip_id)
+            except Trip.DoesNotExist:
+                return Response({"error": {"code": "NOT_FOUND", "message": "Trip not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+            if trip.driver_id != request.user.id or not trip.can_transition_to(new_status):
+                return Response({"error": {"code": "INVALID", "message": "This status change is not allowed."}}, status=status.HTTP_400_BAD_REQUEST)
+
+            trip.status = new_status
+            trip.save(update_fields=["status", "updated_at"])
+
+            if new_status == Trip.Status.COMPLETED:
+                profile, _ = DriverProfile.objects.get_or_create(user=request.user)
+                profile.availability_status = DriverProfile.AvailabilityStatus.ONLINE
+                profile.save(update_fields=["availability_status", "updated_at"])
+                logger.info("trip_completed driver_id=%s trip_id=%s", request.user.id, trip.id)
+
         return Response(TripSerializer(trip).data)

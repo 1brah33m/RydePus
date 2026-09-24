@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 from apps.users.managers import UserManager
 
@@ -25,6 +26,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Every password mutation bumps this timestamp. JWTs carry a snapshot of it
+    # so that any token issued before the change is rejected (see
+    # ``apps.users.authentication``).
+    password_changed_at = models.DateTimeField(default=timezone.now)
 
     objects = UserManager()
 
@@ -38,6 +43,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self) -> str:
         return self.email
+
+    def set_password(self, raw_password):
+        super().set_password(raw_password)
+        self.password_changed_at = timezone.now()
 
     @property
     def full_name(self) -> str:

@@ -1,4 +1,5 @@
 from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
 from rest_framework import serializers
 
 from apps.users.models import User
@@ -44,12 +45,17 @@ class ChangePasswordSerializer(serializers.Serializer):
     def save(self, **kwargs):
         user = self.context["request"].user
         user.set_password(self.validated_data["new_password"])
-        user.save(update_fields=["password"])
+        user.save(update_fields=["password", "password_changed_at"])
         return user
 
 
 class RegisterSerializer(serializers.Serializer):
-    """Payload used when creating a STUDENT or DRIVER account."""
+    """Payload used when creating a STUDENT or DRIVER account.
+
+    DRIVER registrations are deliberately unverified: the account is created
+    with an empty driver profile and cannot operate until an administrator
+    marks ``is_verified`` (see ``apps.users.permissions.IsVerifiedDriver``).
+    """
 
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
@@ -65,7 +71,13 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data: dict) -> User:
+        from apps.drivers.models import DriverProfile
+
         email = validated_data.pop("email")
         password = validated_data.pop("password")
         role = validated_data.pop("role")
-        return User.objects.create_user(email=email, password=password, role=role, **validated_data)
+        with transaction.atomic():
+            user = User.objects.create_user(email=email, password=password, role=role, **validated_data)
+            if role == User.Role.DRIVER:
+                DriverProfile.objects.create(user=user)
+        return user

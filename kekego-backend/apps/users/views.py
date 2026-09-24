@@ -1,8 +1,12 @@
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, get_user_model
 from rest_framework import permissions, status
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.users.authentication import BearerHeaderAuthenticator
 from apps.users.serializers import (
@@ -11,7 +15,7 @@ from apps.users.serializers import (
     UserProfileUpdateSerializer,
     UserSerializer,
 )
-from apps.users.tokens import get_tokens_for_user
+from apps.users.tokens import get_tokens_for_user, password_matches_token
 
 
 def _auth_response(user) -> dict:
@@ -73,3 +77,27 @@ class ChangePasswordView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"detail": "Password changed successfully."})
+
+
+class PasswordAwareTokenRefreshSerializer(TokenRefreshSerializer):
+    """Standard refresh flow that also invalidates pre-change tokens.
+
+    The refresh is only honoured if the refresh token was minted against the
+    user's current password; otherwise every token for that user is rejected.
+    """
+
+    def validate(self, attrs):
+        try:
+            refresh = RefreshToken(attrs["refresh"])
+        except TokenError as exc:
+            raise AuthenticationFailed("The refresh token is invalid or expired.") from exc
+
+        user = get_user_model().objects.filter(pk=refresh["user_id"]).first()
+        if user is None or not user.is_active or not password_matches_token(user, refresh):
+            raise AuthenticationFailed("The refresh token is no longer valid. Please sign in again.")
+
+        return super().validate(attrs)
+
+
+class PasswordAwareTokenRefreshView(TokenRefreshView):
+    serializer_class = PasswordAwareTokenRefreshSerializer

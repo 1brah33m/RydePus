@@ -6,7 +6,7 @@ from drf_spectacular.extensions import OpenApiAuthenticationExtension
 class JWTScheme(OpenApiAuthenticationExtension):
     """Describe simplejwt Bearer tokens in the OpenAPI schema."""
 
-    target_class = "rest_framework_simplejwt.authentication.JWTAuthentication"
+    target_class = "apps.users.authentication.PasswordAwareJWTAuthentication"
     name = "BearerAuth"
 
     def get_security_definition(self, auto_schema) -> dict:

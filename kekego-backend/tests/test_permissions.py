@@ -48,6 +48,24 @@ def test_driver_profile_is_created_for_driver(driver_client, driver_user):
     assert response.status_code == 200
     assert response.json()["role"] == User.Role.DRIVER
     assert response.json()["availability_status"] == "OFFLINE"
+    assert response.json()["is_verified"] is True
+
+
+@pytest.mark.django_db
+def test_unverified_driver_cannot_use_driver_endpoints(api_client, unverified_driver_user):
+    client = APIClient()
+    client.force_authenticate(unverified_driver_user)
+
+    me = client.get(DRIVER_ME_URL)
+    assert me.status_code == 403
+    assert me.json()["error"]["code"] == "PERMISSION_DENIED"
+
+    availability = client.patch(
+        "/api/v1/drivers/availability/",
+        {"availability_status": "ONLINE"},
+        format="json",
+    )
+    assert availability.status_code == 403
 
 
 @pytest.mark.django_db

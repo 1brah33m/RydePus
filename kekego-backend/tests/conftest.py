@@ -1,6 +1,7 @@
 import pytest
 from rest_framework.test import APIClient
 
+from apps.drivers.models import DriverProfile
 from apps.users.models import User
 
 
@@ -22,12 +23,24 @@ def student_user(db) -> User:
 
 @pytest.fixture
 def driver_user(db) -> User:
-    return User.objects.create_user(
+    user = User.objects.create_user(
         email="driver@example.com",
         password="StrongPass123!",
         role=User.Role.DRIVER,
         first_name="Bola",
         last_name="Driver",
+    )
+    DriverProfile.objects.create(user=user, is_verified=True)
+    return user
+
+
+@pytest.fixture
+def unverified_driver_user(db) -> User:
+    """A DRIVER account created through public registration (never verified)."""
+    return User.objects.create_user(
+        email="unverified.driver@example.com",
+        password="StrongPass123!",
+        role=User.Role.DRIVER,
     )
 
 

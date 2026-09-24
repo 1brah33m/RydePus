@@ -26,3 +26,21 @@ class IsDriver(BasePermission):
     def has_permission(self, request, view) -> bool:
         user = request.user
         return bool(user and user.is_authenticated and user.role == User.Role.DRIVER)
+
+
+class IsVerifiedDriver(BasePermission):
+    """Allow drivers whose identity has been verified by a staff member.
+
+    Public registration creates DRIVER accounts that are unverified; they can
+    authenticate but can never operate (go online, view/accept/track trips,
+    or manage availability) until an administrator approves the profile.
+    """
+
+    message = "Your driver account has not been verified yet."
+
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated and user.role == User.Role.DRIVER):
+            return False
+        profile = getattr(user, "driver_profile", None)
+        return bool(profile and profile.is_verified)

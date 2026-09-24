@@ -8,6 +8,9 @@ DEBUG = True
 # Local dev convenience: permissive CORS so the Vite dev server can call us.
 CORS_ALLOW_ALL_ORIGINS = True
 
+# Developers get the interactive schema browser; production stays locked down.
+ENABLE_API_DOCS = True
+
 # ---------------------------------------------------------------------------
 # Database: use the environment config if present, otherwise fall back to a
 # local SQLite file so `python manage.py runserver` works out of the box

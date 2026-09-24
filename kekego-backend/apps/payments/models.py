@@ -31,6 +31,7 @@ class Payment(models.Model):
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.TRIP)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    provider_reference = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

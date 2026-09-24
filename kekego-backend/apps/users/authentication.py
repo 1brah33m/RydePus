@@ -1,6 +1,10 @@
 """Authentication helpers for the users app."""
 
 from rest_framework.authentication import BaseAuthentication
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
+
+from apps.users.tokens import password_matches_token
 
 
 class BearerHeaderAuthenticator(BaseAuthentication):
@@ -16,3 +20,16 @@ class BearerHeaderAuthenticator(BaseAuthentication):
 
     def authenticate_header(self, request) -> str:
         return "Bearer"
+
+
+class PasswordAwareJWTAuthentication(JWTAuthentication):
+    """JWT authentication that rejects tokens issued before a password change."""
+
+    def get_user(self, validated_token):
+        user = super().get_user(validated_token)
+        if not password_matches_token(user, validated_token):
+            raise AuthenticationFailed(
+                "Your session has been invalidated. Please sign in again.",
+                code="token_invalidated",
+            )
+        return user

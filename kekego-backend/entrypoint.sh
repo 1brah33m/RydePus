@@ -5,16 +5,21 @@ set -e
 
 echo "Waiting for PostgreSQL to become available..."
 until python -c "
-import os, sys, time
+import os, sys
 import psycopg
+database_url = os.environ.get('DATABASE_URL', '').strip()
 try:
-    psycopg.connect(
-        host=os.environ.get('DATABASE_HOST', 'db'),
-        port=os.environ.get('DATABASE_PORT', '5432'),
-        user=os.environ.get('DATABASE_USER', 'campus_keke'),
-        password=os.environ.get('DATABASE_PASSWORD', ''),
-        dbname=os.environ.get('DATABASE_NAME', 'campus_keke'),
-    ).close()
+    if database_url:
+        # Deployments that configure DATABASE_URL alone must wait on that URL.
+        psycopg.connect(database_url).close()
+    else:
+        psycopg.connect(
+            host=os.environ.get('DATABASE_HOST', 'db'),
+            port=os.environ.get('DATABASE_PORT', '5432'),
+            user=os.environ.get('DATABASE_USER', 'campus_keke'),
+            password=os.environ.get('DATABASE_PASSWORD', ''),
+            dbname=os.environ.get('DATABASE_NAME', 'campus_keke'),
+        ).close()
     sys.exit(0)
 except Exception:
     sys.exit(1)
