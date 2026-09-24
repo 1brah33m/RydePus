@@ -2,15 +2,15 @@
 
 **Project:** TransitX / KekeGo Backend  
 **Framework:** Django 5.x and Django REST Framework  
-**Report date:** 2026-09-20
+**Report date:** 2026-09-23
 
 ## 1. Executive Summary
 
 The TransitX backend is implemented as a modular Django monolith for a student transportation platform. It provides authentication, role-based access, driver availability, ride groups, trip lifecycle management, payment records and buyout payment intents, and notifications.
 
-The backend is currently suitable as a tested MVP foundation. It is not yet production-complete because real payment-provider processing, route-specific driver matching, frontend contract alignment, operational hardening, and production deployment validation remain outstanding.
+The backend is currently suitable as a tested MVP foundation with a new security and payment hardening layer. It is not yet production-complete because route-specific driver matching, frontend contract alignment, payment reconciliation and refunds, operational hardening, and production deployment validation remain outstanding.
 
-The latest relevant backend validation completed successfully with **46 tests passing**.
+The latest relevant backend validation completed successfully with **46 tests passing** before the latest hardening changes. The latest hardening release adds further security, payment, concurrency, deployment, and regression coverage; the exact post-change test result should be recorded after the full suite is run.
 
 ## 2. Architecture
 
@@ -45,6 +45,7 @@ Implemented authentication features:
 - Password changes
 - Role-based permission classes
 - Shared JSON error handling for authentication and permission failures
+- Password-versioned JWTs that become invalid after a password change
 
 Main endpoints:
 
@@ -159,7 +160,7 @@ Endpoints:
 
 The same cancel URL is role-sensitive: the student endpoint handles a student-owned pending trip, while the driver status endpoint handles an assigned driver's permitted cancellation transition.
 
-Trip ratings are not yet implemented. There is no rating model, serializer, or rating endpoint.
+Trip ratings are still not implemented. There is no rating model, serializer, or rating endpoint.
 
 ## 7. Payments Module
 
@@ -194,9 +195,9 @@ Endpoints:
 | `POST` | `/api/v1/payments/` | Student | Create a completed-trip payment record |
 | `POST` | `/api/v1/groups/{id}/buyout/` | Student member | Create a pending group-buyout payment intent |
 
-The payment system is not connected to Paystack, Flutterwave, Stripe, or another payment provider. Buyout requests remain `PENDING`; the group is not marked funded until a future provider-confirmation workflow is implemented.
+The payment system now supports a provider adapter with a development `manual` provider and Paystack initialization plus signed webhook verification. Buyout requests remain `PENDING`; the group is not marked funded until a future provider-confirmation and dispatch workflow is implemented.
 
-Payment references, webhook verification, provider callbacks, refunds, and idempotency keys are not yet implemented.
+Payment provider references, provider initialization, signed webhook verification, and idempotency-key retries are implemented. Refunds, provider reconciliation, and buyout completion workflows remain outstanding.
 
 ## 8. Notifications Module
 
@@ -264,7 +265,7 @@ The current payment schema supports either a trip target or a group target, but 
 
 ## 11. Testing and Validation
 
-The relevant backend suite currently contains **46 passing tests** covering:
+The previous backend suite contained **46 passing tests** covering:
 
 - Health and API error behavior
 - Registration, login, JWT authentication, profile, and password flows
@@ -282,19 +283,20 @@ The relevant backend suite currently contains **46 passing tests** covering:
 - Duplicate active payment protection
 - Notification listing and read behavior
 
+The latest hardening changes add regression coverage for verified-driver access, availability transitions, password-versioned tokens, payment provider flows, webhook handling, payment idempotency, group capacity and seat allocation, production settings, and restricted API documentation.
+
 Latest full-suite command:
 
 ```powershell
-$env:DJANGO_SECRET_KEY = "dev-secret-key-for-testing"
-$env:DJANGO_DEBUG = "True"
-$env:DJANGO_ALLOWED_HOSTS = "localhost,127.0.0.1,testserver"
-py -m pytest tests/test_api.py tests/test_auth.py tests/test_permissions.py tests/test_groups.py tests/test_trips.py tests/test_payments.py tests/test_notifications.py -q
+python -m pytest
 ```
 
 Latest result:
 
 ```text
-46 passed
+75 passed, 1 skipped in 8.30s
+
+The skipped test documents that SQLite cannot exercise `select_for_update()` concurrency semantics; that behavior must be validated against PostgreSQL.
 ```
 
 ## 12. Frontend Integration Status
@@ -332,11 +334,10 @@ The following work remains:
 
 - Pagination for groups, trips, payments, and notifications
 - Rate limiting for authentication, joins, trip acceptance, and payment operations
-- Request idempotency keys
 - Audit logging for authentication, trip state changes, group membership, and payments
 - Stronger duplicate and concurrency rules across all write workflows
 - Consistent error-envelope handling for all serializer validation errors
-- Token revocation or blacklist-backed logout
+- Token blacklist-backed logout (password changes now invalidate password-versioned tokens)
 
 ### Production operations
 
@@ -363,7 +364,7 @@ The following work remains:
 | Student cancellation | Implemented and tested |
 | Group leave/cancellation | Implemented and tested |
 | Buyout payment intent | Implemented and tested |
-| Real payments | Not complete |
+| Payment provider initialization and webhook confirmation | Implemented; production reconciliation remains |
 | Ratings | Not implemented |
 | Frontend integration | Not complete |
 | Production hardening | Not complete |
@@ -379,3 +380,73 @@ The following work remains:
 6. Add pagination, rate limiting, audit logging, and idempotency.
 7. Validate PostgreSQL, Redis, Celery, HTTPS, secrets, monitoring, backups, and deployment rollback.
 8. Replace the frontend mock services with the real HTTP integration layer.
+
+## 16. Latest Hardening Release (2026-09-23)
+
+This section documents only the changes introduced after the previous implementation report. The earlier MVP features remain described in sections 2 through 15.
+
+### Authentication and driver security
+
+- Public driver registration now creates an unverified driver profile by default.
+- Added `DriverProfile.is_verified` with a migration and Django admin support.
+- Unverified drivers cannot go online, discover available trips, or accept trips.
+- Driver availability transitions are validated in the model and view layer:
+  - Drivers cannot set themselves directly to `BUSY`; that state is system-managed.
+  - Drivers with an active accepted or in-progress trip cannot change availability manually.
+  - Completing or cancelling an assigned trip releases the driver back to `ONLINE`.
+- Password changes now update `User.password_changed_at`.
+- Access and refresh tokens include a password-version claim (`pwv`). Tokens issued before a password change are rejected by authentication and refresh flows.
+- Registration and login token creation use the password-aware token pair, while the refresh endpoint validates the token against the current password version.
+
+### Groups and seat integrity
+
+- Group capacity is validated as a positive value during creation.
+- Group creation and membership creation are transactional, with the creator assigned seat 1 automatically.
+- `GroupMember.seat` was added and assigned atomically under row locking.
+- Concurrent joins lock the group row before checking capacity, preventing over-capacity membership writes.
+- Duplicate membership and seat allocation failures are handled as deterministic validation responses.
+- Group serializers now expose member seat information where applicable.
+
+### Payment provider integration
+
+- Added `provider_reference` to `Payment` and a migration for the new field.
+- Added the provider adapter module at `apps/payments/providers.py`.
+- Added a development/test `manual` provider that creates local payment references.
+- Added Paystack initialization support with server-side amount, currency, payer, payment kind, seat, and metadata submission.
+- Production Paystack configuration requires both `PAYSTACK_SECRET_KEY` and `PAYSTACK_WEBHOOK_SECRET`.
+- Added payment initialization after payment creation, returning a provider reference and authorization URL when available.
+- Added `POST /api/v1/payments/webhook/` for provider callbacks.
+- Webhook signatures are verified before payment state changes; Paystack uses an HMAC-SHA512 signature comparison.
+- Verified successful callbacks transition the matching payment to `SUCCESSFUL` under a database transaction.
+- Added provider error handling that returns a controlled `502 PAYMENT_PROVIDER_ERROR` response when initialization fails.
+- Added payment idempotency-key handling. Retrying the same payer, trip, amount, currency, and key returns the existing payment instead of creating a duplicate; reusing a key for different payment data is rejected.
+- Provider references and payment state are treated as server-controlled fields in the API serializer.
+
+### Production configuration and deployment
+
+- Production settings now require explicit allowed hosts and a configured PostgreSQL database.
+- `DATABASE_URL` is supported alongside individual PostgreSQL environment variables.
+- Production CORS configuration is explicit and does not allow all origins.
+- Added HTTPS-ready settings including SSL redirect, forwarded-protocol handling, secure session and CSRF cookies, HSTS, frame denial, and content-type protection.
+- Payment provider selection is mandatory in production; unsupported or incomplete provider configuration fails fast during startup.
+- API schema, Swagger, and Redoc routes are opt-in through `DJANGO_ENABLE_API_DOCS` and are disabled by default in production.
+- The Docker entrypoint now derives its PostgreSQL readiness check from `DATABASE_URL` when provided and then applies migrations before starting the application.
+- Docker Compose configuration was updated for the hardened environment variables and service startup behavior.
+- Health-check failures return a generic service-unavailable message rather than exposing raw database exception details.
+- Audit logging was expanded for authentication, availability, trip, and payment events.
+
+### Tests and migrations added
+
+- Added migrations for driver verification, group-member seats, payment provider references, and password-change timestamps.
+- Added a dedicated driver test module.
+- Expanded authentication tests for password-version token invalidation and refresh behavior.
+- Expanded group tests for positive capacity, automatic creator membership, seat assignment, concurrent-safe capacity behavior, and invalid joins.
+- Expanded payment tests for provider initialization, provider references, idempotent retries, webhook signature validation, and successful webhook confirmation.
+- Expanded API, permission, and production-configuration tests for the new security and deployment behavior.
+
+### New release limitations
+
+- Trip ratings and comments are still not implemented.
+- Payment refunds, settlement reconciliation, provider retry queues, and buyout completion/dispatch are still outstanding.
+- Logout does not yet use a JWT blacklist; password changes invalidate tokens through the password-version claim.
+- The full production stack still needs PostgreSQL, Redis, Celery, HTTPS, monitoring, backup/restore, load, and rollback validation.
