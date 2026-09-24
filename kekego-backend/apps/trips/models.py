@@ -48,3 +48,27 @@ class Trip(models.Model):
 
     def __str__(self) -> str:
         return f"Trip {self.id} - {self.status}"
+
+
+class TripRating(models.Model):
+    """A rating submitted by a participant after a trip is completed."""
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="ratings")
+    rater = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="trip_ratings",
+    )
+    score = models.PositiveSmallIntegerField()
+    comment = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("trip", "rater"), name="unique_trip_rating_per_rater"),
+            models.CheckConstraint(condition=models.Q(score__gte=1, score__lte=5), name="trip_rating_score_1_to_5"),
+        ]
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return f"Rating for trip {self.trip_id} by {self.rater_id}"

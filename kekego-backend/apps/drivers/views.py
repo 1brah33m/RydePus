@@ -31,6 +31,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "vehicle_type",
             "vehicle_plate",
             "license_number",
+            "preferred_pickup_location",
+            "preferred_destination",
             "created_at",
             "updated_at",
         )
@@ -45,7 +47,7 @@ class DriverAvailabilitySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DriverProfile
-        fields = ("availability_status",)
+        fields = ("availability_status", "preferred_pickup_location", "preferred_destination")
 
 
 class DriverMeView(APIView):

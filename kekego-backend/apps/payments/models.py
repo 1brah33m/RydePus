@@ -30,6 +30,7 @@ class Payment(models.Model):
     seats = models.PositiveIntegerField(default=1)
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.TRIP)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -39,6 +40,11 @@ class Payment(models.Model):
             models.CheckConstraint(
                 condition=(models.Q(trip__isnull=False, group__isnull=True) | models.Q(trip__isnull=True, group__isnull=False)),
                 name="payment_has_one_target",
+            ),
+            models.UniqueConstraint(
+                condition=~models.Q(idempotency_key=""),
+                fields=("payer", "idempotency_key"),
+                name="payment_unique_payer_idempotency_key",
             ),
         ]
 

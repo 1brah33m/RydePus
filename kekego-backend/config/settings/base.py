@@ -159,6 +159,14 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "config.exceptions.api_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("DRF_THROTTLE_ANON", default="30/minute"),
+        "user": env("DRF_THROTTLE_USER", default="120/minute"),
+    },
 }
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,12 @@ DATABASES = {
 
 CELERY_TASK_ALWAYS_EAGER = True
 
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {"anon": "10000/minute", "user": "10000/minute"}
+
+# Django's default PBKDF2 hasher (720k iterations) costs ~10s per password
+# check on this machine, which makes the suite hang. MD5 is fine for tests.
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
 # Keep test output quiet.

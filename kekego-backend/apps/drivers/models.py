@@ -23,6 +23,8 @@ class DriverProfile(models.Model):
     vehicle_type = models.CharField(max_length=80, blank=True, default="")
     vehicle_plate = models.CharField(max_length=30, blank=True, default="")
     license_number = models.CharField(max_length=80, blank=True, default="")
+    preferred_pickup_location = models.CharField(max_length=255, blank=True, default="")
+    preferred_destination = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

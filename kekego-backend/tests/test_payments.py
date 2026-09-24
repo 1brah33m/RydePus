@@ -2,6 +2,7 @@ import pytest
 from rest_framework import status
 
 from apps.groups.models import Group
+from apps.payments.models import Payment
 from apps.trips.models import Trip
 
 PAYMENTS_URL = "/api/v1/payments/"
@@ -134,3 +135,54 @@ def test_group_buyout_rejects_duplicate_active_intent(student_user, student_clie
 
     assert first.status_code == status.HTTP_201_CREATED
     assert second.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def _create_completed_trip(student_user):
+    group = Group.objects.create(
+        name="Idempotent Trip",
+        pickup_location="Hostel",
+        destination="Market",
+        capacity=2,
+        created_by=student_user,
+    )
+    return Trip.objects.create(
+        group=group,
+        created_by=student_user,
+        pickup_location="Hostel",
+        destination="Market",
+        fare=250,
+        status=Trip.Status.COMPLETED,
+    )
+
+
+@pytest.mark.django_db
+def test_payment_retry_with_same_idempotency_key_returns_existing(student_user, student_client):
+    trip = _create_completed_trip(student_user)
+    payload = {"trip": trip.id, "amount": 250, "currency": "NGN", "idempotency_key": "req-1"}
+
+    first = student_client.post(PAYMENTS_URL, payload, format="json")
+    second = student_client.post(PAYMENTS_URL, payload, format="json")
+
+    assert first.status_code == status.HTTP_201_CREATED
+    assert second.status_code == status.HTTP_200_OK
+    assert first.json()["id"] == second.json()["id"]
+    assert Payment.objects.filter(payer=student_user, idempotency_key="req-1").count() == 1
+
+
+@pytest.mark.django_db
+def test_payment_idempotency_key_reused_for_different_fields_rejected(student_user, student_client):
+    trip = _create_completed_trip(student_user)
+    payload = {"trip": trip.id, "amount": 250, "currency": "NGN", "idempotency_key": "req-2"}
+
+    first = student_client.post(PAYMENTS_URL, payload, format="json")
+
+    changed = student_client.post(
+        PAYMENTS_URL,
+        {"trip": trip.id, "amount": 300, "currency": "NGN", "idempotency_key": "req-2"},
+        format="json",
+    )
+
+    assert first.status_code == status.HTTP_201_CREATED
+    assert changed.status_code == status.HTTP_400_BAD_REQUEST
+    assert changed.json()["error"]["code"] == "INVALID"
