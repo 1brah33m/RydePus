@@ -8,13 +8,12 @@
 
 The TransitX backend is implemented as a modular Django monolith for a student transportation platform. It provides authentication, role-based access, driver availability, ride groups, trip lifecycle management, payment records and buyout payment intents, and notifications.
 
-The backend is currently suitable as a tested MVP foundation with a new security and payment hardening layer. It is not yet production-complete because route-specific driver matching, frontend contract alignment, payment reconciliation and refunds, operational hardening, and production deployment validation remain outstanding.
+The backend is currently suitable as a tested MVP foundation with security, payment, and operational hardening. It is not yet fully production-ready because route-specific driver matching, frontend contract alignment, external provider verification, and staging deployment validation remain outstanding.
 
 The backend validates with **121 tests collected, 118 passing, 3 skipped on
-SQLite** (the 3 skips are the PostgreSQL-only concurrency tests, which run in
-CI against a real PostgreSQL container). See the addendum at the bottom for the
-production-hardening release that adds refunds, reconciliation, monitoring,
-backups, CI, and the finalized API contract.
+SQLite** (the 3 skips are PostgreSQL-only concurrency tests). The production
+hardening release adds refunds, reconciliation, monitoring, backups, CI, and
+the finalized API contract. PostgreSQL-backed concurrency coverage runs in CI.
 
 ## 2. Architecture
 
@@ -298,9 +297,10 @@ python -m pytest
 Latest result:
 
 ```text
-75 passed, 1 skipped in 8.30s
+118 passed, 3 skipped in 16.97s
 
-The skipped test documents that SQLite cannot exercise `select_for_update()` concurrency semantics; that behavior must be validated against PostgreSQL.
+The skipped tests document that SQLite cannot exercise `select_for_update()`
+concurrency semantics; that behavior is validated against PostgreSQL in CI.
 ```
 
 ## 12. Frontend Integration Status
@@ -457,7 +457,7 @@ This section documents only the changes introduced after the previous implementa
 
 ---
 
-## Addendum — Production hardening release (2026-09-24)
+## Addendum: Production hardening release (2026-09-24)
 
 This release closes the outstanding items from the security/payment hardening
 layer and adds the operational layer required to run in production.
@@ -483,9 +483,9 @@ layer and adds the operational layer required to run in production.
 
 ### Database backups & restore testing
 
-- `python manage.py backup_db` — `pg_dump --format=custom` for PostgreSQL, the
+- `python manage.py backup_db`: uses `pg_dump --format=custom` for PostgreSQL and the
   `sqlite3` backup API for SQLite; writes into `BACKUP_DIR` (git-ignored).
-- `python manage.py restore_db --input <file> [--target ...] [--yes]` —
+- `python manage.py restore_db --input <file> [--target ...] [--yes]`:
   `pg_restore --clean --if-exists` / SQLite `backup()`, refusing destructive
   overwrites without confirmation.
 - Tested with a SQLite round-trip and an overwrite-refusal test.
@@ -496,14 +496,14 @@ layer and adds the operational layer required to run in production.
   (`settlement_reference`, `provider_event`, `reconciled_at`,
   `refunded_amount`, `refunded_at`) with DB constraints
   (`amount > 0`, `seats > 0`, `0 <= refunded_amount <= amount`).
-- `POST /api/v1/payments/{id}/refund/` — payer refunds a `SUCCESSFUL` payment
+- `POST /api/v1/payments/{id}/refund/`: the payer refunds a `SUCCESSFUL` payment
   up to the outstanding balance; over-refund is rejected; provider errors are
   surfaced as `502 PAYMENT_PROVIDER_ERROR`.
 - Refund webhook events (`*refund*`) confirm PENDING refunds and update the
   ledger; unknown references return `404`.
 - `manage.py reconcile_payments` / beat task `payments.reconcile` calls the
   provider's `verify_transaction` (Paystack) and aligns local state: confirm
-  `PENDING` ? `SUCCESSFUL`, mark provider failures `FAILED`, capture settlement
+  `PENDING` to `SUCCESSFUL`, mark provider failures `FAILED`, and capture settlement
   references. Verified locally against the manual provider.
 
 ### Notification & Celery task reliability
@@ -530,8 +530,8 @@ layer and adds the operational layer required to run in production.
 ### Validation contracts
 
 - Fares: `>= 0.01` at API and DB level (was `>= 0`).
-- Coordinates: WGS84 WGS84 range constraints (`lat ? [-90,90]`,
-  `lng ? [-180,180]`) at API and DB for groups and trips; pairs must be
+- Coordinates: WGS84 range constraints (`lat in [-90,90]`,
+  `lng in [-180,180]`) at API and DB for groups and trips; pairs must be
   provided together.
 - Seats/capacity: group capacity `1..12`; member seats `1..12`; buyout seats
   bounded by remaining capacity.
@@ -555,14 +555,15 @@ layer and adds the operational layer required to run in production.
 
 ### Now implemented (previously outstanding)
 
-- Trip ratings/comments — implemented with single-rate enforcement. ?
-- Payment refunds — implemented (API + provider + webhooks). ?
-- Settlement reconciliation — implemented (`reconcile_payments` + beat). ?
-- Buyout completion/dispatch — buyouts create server-priced intents confirmed
-  via the payment webhook (committed-trip protection + single-active-intent
-  guard). ?
-- Monitoring, backup/restore, load smoke tests, and concurrency tests on
-  PostgreSQL. ?
+- Trip ratings/comments: implemented with single-rate enforcement.
+- Payment refunds: implemented through the API, provider adapter, and webhooks.
+- Settlement reconciliation: implemented through `reconcile_payments` and the
+  Celery beat task.
+- Buyout completion/dispatch: buyouts create server-priced intents confirmed
+  through the payment webhook, with committed-trip protection and a
+  single-active-intent guard.
+- Monitoring, backup/restore, load smoke tests, and PostgreSQL concurrency
+  tests: implemented.
 
 ### Remaining (tracked, non-blocking)
 
