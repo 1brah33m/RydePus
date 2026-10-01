@@ -24,8 +24,6 @@ import { DriverHome } from './pages/driver/DriverHome'
 import { DriverRequests } from './pages/driver/DriverRequests'
 import { DriverEarnings } from './pages/driver/DriverEarnings'
 import { DriverProfile } from './pages/driver/DriverProfile'
-import { PaymentReview } from './pages/payment/PaymentReview'
-import { PaymentCheckout } from './pages/payment/PaymentCheckout'
 import { homePathForRole } from './utils/routing'
 
 /** Root route: onboarding for guests, a brief branded splash for returning users. */
@@ -121,8 +119,6 @@ export default function App() {
       <Route path="/driver/requests" element={<DriverProtected><DriverRequests /></DriverProtected>} />
       <Route path="/driver/earnings" element={<DriverProtected><DriverEarnings /></DriverProtected>} />
       <Route path="/driver/profile" element={<DriverProtected><DriverProfile /></DriverProtected>} />
-      <Route path="/payment/review" element={<Protected><PaymentReview /></Protected>} />
-      <Route path="/payment/checkout" element={<Protected><PaymentCheckout /></Protected>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

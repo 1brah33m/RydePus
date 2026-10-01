@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CreditCard, Users, MapPin } from 'lucide-react'
-import { CAMPUS_LOCATIONS, FARE_PER_SEAT, MAX_GROUP_SIZE } from '../../mock/data'
+import { Users, MapPin } from 'lucide-react'
+import { CAMPUS_LOCATIONS } from '../../config/locations'
+import { GROUP_SEATS, groupFare, perSeatFare } from '../../config/pricing'
 import { useApp } from '../../context/AppContext'
 import { formatCurrency } from '../../utils/format'
 import { AppHeader } from '../../components/navigation/AppHeader'
@@ -25,10 +26,7 @@ export function CreateGroup() {
   const pickup = CAMPUS_LOCATIONS.find((l) => l.id === pickupId)
   const destination = CAMPUS_LOCATIONS.find((l) => l.id === destinationId)
 
-  const rawSeats = Number(params.get('seats'))
-  const requestedSeats = Number.isInteger(rawSeats) ? Math.min(MAX_GROUP_SIZE, Math.max(1, rawSeats)) : 1
-
-  const [busy, setBusy] = useState<'create' | 'pay' | null>(null)
+  const [busy, setBusy] = useState<'create' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [blocked, setBlocked] = useState(false)
   const [leaving, setLeaving] = useState(false)
@@ -71,20 +69,12 @@ export function CreateGroup() {
     setBusy('create')
     setError(null)
     try {
-      const group = await createGroup(pickup, destination, requestedSeats)
+      const group = await createGroup(pickup, destination)
       navigate(`/groups/${group.id}`, { replace: true })
-    } catch {
-      setError('Could not create your group. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create your group. Please try again.')
       setBusy(null)
     }
-  }
-
-  const handlePayFour = () => {
-    if (activeGroup) {
-      setBlocked(true)
-      return
-    }
-    navigate(`/payment/review?pickup=${encodeURIComponent(pickup.id)}&destination=${encodeURIComponent(destination.id)}`)
   }
 
   const handleLeave = async () => {
@@ -101,9 +91,9 @@ export function CreateGroup() {
     }
   }
 
-  const fullSeatPrice = FARE_PER_SEAT * 4
-  const remaining = requestedSeats >= MAX_GROUP_SIZE ? 0 : MAX_GROUP_SIZE - requestedSeats
-  const memberList = student ? [{ id: 'you', name: student.fullName, seats: requestedSeats, isCurrentUser: true } as const] : []
+  const perSeat = perSeatFare(pickup.id, destination.id)
+  const total = groupFare(pickup.id, destination.id)
+  const memberList = student ? [{ id: 'you', name: student.fullName, seats: 1, isCurrentUser: true } as const] : []
 
   return (
     <>
@@ -112,33 +102,26 @@ export function CreateGroup() {
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">Route</p>
           <RouteIndicator pickup={pickup} destination={destination} className="mt-1.5" />
-          {requestedSeats > 1 && (
-            <p className="mt-2.5 text-xs text-ink-500 dark:text-slate-400">
-              Booking <strong className="text-ink-700 dark:text-slate-300">{requestedSeats} seats</strong> for this group
-            </p>
-          )}
+          <p className="mt-2.5 text-xs text-ink-500 dark:text-slate-400">
+            Group of <strong className="text-ink-700 dark:text-slate-300">{GROUP_SEATS} seats</strong> ·{' '}
+            {formatCurrency(perSeat)} per person · {formatCurrency(total)} when full
+          </p>
         </Card>
 
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Passengers</h2>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-500/10 px-3 py-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
-              <Users aria-hidden className="size-4" />{requestedSeats}/{MAX_GROUP_SIZE}
+              <Users aria-hidden className="size-4" />1/{GROUP_SEATS}
             </span>
           </div>
           <div className="mt-3">
-            <PassengerSlots members={memberList} waitingLabel="Waiting for passenger" />
+            <PassengerSlots members={memberList} maxSlots={GROUP_SEATS} waitingLabel="Empty seat" />
           </div>
-          {remaining > 0 ? (
-            <p className="mt-3 rounded-xl bg-ink-50 dark:bg-white/5 px-3.5 py-2.5 text-sm text-ink-600 dark:text-slate-400">
-              You&apos;ll be waiting for <strong className="text-ink-800 dark:text-slate-200">{remaining} more passenger{remaining > 1 ? 's' : ''}</strong> to
-              fill this group.
-            </p>
-          ) : (
-            <p className="mt-3 rounded-xl bg-ink-50 dark:bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-ink-800 dark:text-slate-200">
-              Your group is full — a driver is being assigned now.
-            </p>
-          )}
+          <p className="mt-3 rounded-xl bg-ink-50 dark:bg-white/5 px-3.5 py-2.5 text-sm text-ink-600 dark:text-slate-400">
+            Your group needs <strong className="text-ink-800 dark:text-slate-200">{GROUP_SEATS - 1} more passenger{GROUP_SEATS - 1 > 1 ? 's' : ''}</strong> before
+            a driver is matched — or you can pay for the empty seats yourself.
+          </p>
         </Card>
 
         {error && (
@@ -152,20 +135,8 @@ export function CreateGroup() {
             <Users aria-hidden className="size-4" />
             Create Group
           </Button>
-          <Button
-            size="lg"
-            fullWidth
-            variant="secondary"
-            onClick={handlePayFour}
-          >
-            <CreditCard aria-hidden className="size-4" />
-            Pay for 4 Seats
-            <span className="ml-auto rounded-lg bg-white/15 px-2 py-0.5 text-xs font-semibold">
-              {formatCurrency(fullSeatPrice)}
-            </span>
-          </Button>
           <p className="px-2 text-center text-xs text-ink-400 dark:text-slate-500">
-            Pay for all 4 seats and your group goes straight to a driver — no waiting.
+            The ride is only sent to drivers once all {GROUP_SEATS} seats are filled.
           </p>
         </div>
       </div>

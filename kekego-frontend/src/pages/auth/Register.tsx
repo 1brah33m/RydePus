@@ -4,14 +4,17 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Camera } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { authService } from '../../services/authService'
+import { isGoogleSignInConfigured, requestGoogleIdToken } from '../../services/googleAuth'
 import type { RegisterPayload } from '../../types'
 import { homePathForRole } from '../../utils/routing'
+import { initials } from '../../utils/nameInitials'
+import { checkPasswords } from '../../config/password'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { DarkField, DarkSelect } from '../../components/ui/DarkField'
 import { AuthLayout } from './AuthLayout'
-import { GoogleIcon, deriveName, fetchGoogleAccount, initials } from './sharedAuth'
+import { GoogleIcon, NameAndPasswordFields } from './sharedAuth'
 
 const LEVELS = [100, 200, 300, 400, 500, 600, 700].map((n) => ({
   value: String(n),
@@ -33,21 +36,46 @@ const FACULTIES = [
 
 type Step = 'email' | 'profile' | 'verifying'
 
-type FieldErrors = Partial<Record<'fullName' | 'email' | 'phone' | 'faculty' | 'department' | 'level', string>>
+const EMPTY_FORM: RegisterPayload = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+}
+
+type FieldErrors = Partial<
+  Record<
+    | 'firstName'
+    | 'lastName'
+    | 'email'
+    | 'phone'
+    | 'faculty'
+    | 'department'
+    | 'level'
+    | 'password'
+    | 'confirmation'
+    | 'matricNumber',
+    string
+  >
+>
 
 export function Register() {
   const { register, status } = useAuth()
   const navigate = useNavigate()
 
   const [step, setStep] = useState<Step>('email')
-  const [form, setForm] = useState<RegisterPayload>({ fullName: '', email: '' })
-  const [errors, setErrors] = useState<FieldErrors & { matricNumber?: string }>({})
+  const [form, setForm] = useState<RegisterPayload>(EMPTY_FORM)
+  const [errors, setErrors] = useState<FieldErrors>({})
   const [busy, setBusy] = useState(false)
   const [googleBusy, setGoogleBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  const name = form.fullName?.trim() ?? ''
-  const nameInitials = useMemo(() => initials(name || 'S T'), [name])
+  /** True when the name/email came from a verified Google token. */
+  const googleLinked = Boolean(form.googleIdToken)
+  const googleAvailable = isGoogleSignInConfigured()
+
+  const nameInitials = useMemo(() => initials(form.firstName, form.lastName), [form.firstName, form.lastName])
 
   // Redirect if already authenticated and not on the verifying screen.
   useEffect(() => {
@@ -58,7 +86,10 @@ export function Register() {
 
   // ----- Email / Google step ------------------------------------------------
 
-  /** Manual entry: derive the name from the typed email, then move to profile. */
+  /**
+   * Manual entry: keep the name fields empty on purpose. We no longer guess a
+   * person's name from their email address; they type it on the next step.
+   */
   const handleNext = (e: FormEvent) => {
     e.preventDefault()
     const email = form.email?.trim() ?? ''
@@ -71,22 +102,31 @@ export function Register() {
       return
     }
     setErrors((p) => ({ ...p, email: undefined }))
-    setForm((p) => ({ ...p, email, fullName: p.fullName?.trim() || deriveName(email) }))
+    setForm((p) => ({ ...p, email }))
     setStep('profile')
   }
 
-  /** Simulate a Google OAuth round-trip that returns the linked identity. */
+  /**
+   * Real Google sign-in. The ID token is verified by the backend, which replies
+   * with the first/last name we are allowed to prefill from the Google profile.
+   */
   const handleGoogle = async () => {
     setGoogleBusy(true)
+    setFormError(null)
     setErrors((p) => ({ ...p, email: undefined }))
     try {
-      const account = await fetchGoogleAccount(form.email)
+      const idToken = await requestGoogleIdToken()
+      const identity = await authService.resolveGoogleIdentity(idToken)
       setForm((p) => ({
         ...p,
-        fullName: p.fullName?.trim() || account.fullName,
-        email: account.email,
+        firstName: identity.first_name,
+        lastName: identity.last_name,
+        email: identity.email,
+        googleIdToken: idToken,
       }))
       setStep('profile')
+    } catch (err) {
+      setFormError(err instanceof Error && err.message ? err.message : 'Google sign-in failed. Try again.')
     } finally {
       setGoogleBusy(false)
     }
@@ -98,7 +138,12 @@ export function Register() {
     const email = form.email?.trim() ?? ''
     const phoneDigits = (form.phone ?? '').replace(/\D/g, '')
     const next: FieldErrors = {}
-    if (!form.fullName?.trim()) next.fullName = 'Enter your full name.'
+    if (!form.firstName?.trim()) next.firstName = 'Enter your first name.'
+    if (!form.lastName?.trim()) {
+      next.lastName = googleLinked
+        ? 'Your Google account has no last name. Use "use a different name" to add one.'
+        : 'Enter your last name.'
+    }
     if (!email) next.email = 'Enter your campus email.'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.email = 'Enter a valid email address.'
     if (!form.phone?.trim()) next.phone = 'Enter your phone number.'
@@ -108,8 +153,9 @@ export function Register() {
     if (!form.faculty?.trim()) next.faculty = 'Select your faculty.'
     if (!form.department?.trim()) next.department = 'Enter your department.'
     if (!form.level) next.level = 'Select your current level.'
+    Object.assign(next, checkPasswords(form.password, form.confirmPassword))
     setErrors(next)
-    return !next.fullName && !next.email && !next.phone && !next.faculty && !next.department && !next.level
+    return Object.values(next).every((message) => !message)
   }
 
   const handleCreate = async (e: FormEvent) => {
@@ -121,12 +167,17 @@ export function Register() {
     try {
       await register({
         ...form,
-        fullName: form.fullName!.trim(),
+        firstName: form.firstName!.trim(),
+        lastName: form.lastName!.trim(),
         email: form.email!.trim().toLowerCase(),
         phone: (form.phone ?? '').replace(/\D/g, ''),
       })
-    } catch {
-      setFormError('We could not verify your student account. Please try again.')
+    } catch (err) {
+      setFormError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'We could not verify your student account. Please try again.',
+      )
       setStep('profile')
       setBusy(false)
     }
@@ -134,7 +185,14 @@ export function Register() {
 
   const setField = (field: keyof RegisterPayload, value: string) => {
     setForm((p) => ({ ...p, [field]: value }))
-    if (errors[field as keyof typeof errors]) setErrors((p) => ({ ...p, [field]: undefined }))
+    if (errors[field as keyof FieldErrors]) setErrors((p) => ({ ...p, [field]: undefined }))
+  }
+
+  /** Leave the Google pathway: drop the token and let the names be edited. */
+  const unlockNames = () => {
+    // Switching to manual registration must not keep names Google supplied.
+    setForm((p) => ({ ...p, googleIdToken: undefined, firstName: '', lastName: '' }))
+    setErrors((p) => ({ ...p, firstName: undefined, lastName: undefined }))
   }
 
   // ------- Step 1 · email / Google -------
@@ -147,19 +205,27 @@ export function Register() {
       <p className="mt-1.5 text-sm text-ink-400">Ride with your classmates, split the fare, get there together.</p>
 
       <div className="mt-7">
-        <button
-          type="button"
-          onClick={handleGoogle}
-          disabled={googleBusy || busy}
-          className="flex h-13 w-full items-center justify-center gap-3 rounded-full bg-white text-sm font-semibold text-ink-900 transition hover:bg-gray-100 active:scale-[0.99] disabled:opacity-60"
-        >
-          {googleBusy ? <Spinner size="sm" className="text-ink-400" /> : <GoogleIcon />}
-          {googleBusy ? 'Connecting to Google…' : 'Continue with Google'}
-        </button>
+        {googleAvailable ? (
+          <button
+            type="button"
+            onClick={handleGoogle}
+            disabled={googleBusy || busy}
+            className="flex h-13 w-full items-center justify-center gap-3 rounded-full bg-white text-sm font-semibold text-ink-900 transition hover:bg-gray-100 active:scale-[0.99] disabled:opacity-60"
+          >
+            {googleBusy ? <Spinner size="sm" className="text-ink-400" /> : <GoogleIcon />}
+            {googleBusy ? 'Connecting to Google…' : 'Continue with Google'}
+          </button>
+        ) : (
+          <p className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[13px] text-ink-500">
+            Google sign-in is not configured for this environment yet. Register with your email below.
+          </p>
+        )}
 
         <div className="my-6 flex items-center gap-3">
           <span className="h-px flex-1 bg-white/10" />
-          <span className="text-xs font-medium uppercase tracking-wider text-ink-500">or</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-ink-500">
+            {googleAvailable ? 'or' : ''}
+          </span>
           <span className="h-px flex-1 bg-white/10" />
         </div>
 
@@ -221,13 +287,18 @@ export function Register() {
       </div>
 
       <form onSubmit={handleCreate} className="mt-6 space-y-4" noValidate>
-        <DarkField
-          label="Full name"
-          autoComplete="name"
-          placeholder="e.g. Aisha Bello"
-          value={form.fullName ?? ''}
-          onChange={(e) => setField('fullName', e.target.value)}
-          error={errors.fullName}
+        <NameAndPasswordFields
+          firstName={form.firstName}
+          lastName={form.lastName}
+          password={form.password}
+          confirmation={form.confirmPassword}
+          locked={googleLinked}
+          errors={errors}
+          onFirstName={(v) => setField('firstName', v)}
+          onLastName={(v) => setField('lastName', v)}
+          onPassword={(v) => setField('password', v)}
+          onConfirmation={(v) => setField('confirmPassword', v)}
+          onUnlockNames={unlockNames}
         />
         <DarkField
           label="Campus email"
@@ -238,6 +309,9 @@ export function Register() {
           value={form.email ?? ''}
           onChange={(e) => setField('email', e.target.value)}
           error={errors.email}
+          readOnly={googleLinked}
+          hint={googleLinked ? 'Taken from your Google account.' : undefined}
+          className={googleLinked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
         />
         <DarkField
           label="Phone number"

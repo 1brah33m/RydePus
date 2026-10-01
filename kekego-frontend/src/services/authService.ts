@@ -1,202 +1,234 @@
-import { DEMO_ACCOUNT, DEMO_DRIVER_ACCOUNT, MOCK_DRIVERS, MOCK_STUDENTS } from '../mock/data'
 import type { RegisterPayload, Student, UserRole } from '../types'
-import { delay } from '../utils/delay'
-import * as backend from './mockBackend'
+import { apiClient } from './apiClient'
+import type { VerifiedGoogleIdentity } from './googleAuth'
+
+export type { VerifiedGoogleIdentity }
 
 /**
- * Authentication service.
+ * Authentication service — wired to the Django backend.
  *
- * Mock implementation. Swap the internals with real HTTP calls later:
- *   POST /api/v1/auth/login
- *   POST /api/v1/auth/register
- *   GET  /api/v1/auth/me
- *   POST /api/v1/auth/logout
+ * Endpoint mapping:
+ *   POST /api/v1/auth/login/           -> login()
+ *   POST /api/v1/auth/register/        -> register()
+ *   POST /api/v1/auth/google/identity/ -> resolveGoogleIdentity()
+ *   GET  /api/v1/auth/me/              -> getSession()
+ *   PATCH /api/v1/auth/me/             -> updateProfile()
+ *   POST /api/v1/auth/change-password/ -> changePassword()
+ *   (none)                             -> logout() (local token clear; the
+ *                                          backend has no revocation endpoint)
  *
- * The UI never calls these endpoints directly.
+ * Adapter notes:
+ * - The backend authenticates with email only. The frontend previously
+ *   accepted a phone number; phone login is not supported by the API.
+ * - The backend User has no department/faculty/level fields, so those student
+ *   profile fields are kept on the client only and reset to "" after a fresh
+ *   login until the backend grows them.
+ * - Roles are uppercase on the backend (STUDENT / DRIVER) and lowercase in the
+ *   frontend (student / driver).
+ * - Registration requires first name, last name, a password and its
+ *   confirmation. There is no default password.
  */
 
-const PASSWORDS_KEY = 'transitx.passwords.v1'
+const SESSION_KEY = 'rydepus.session.v1'
 
-/** Per-account role, keyed by student id (drivers register through the same table). */
-const ROLES_KEY = 'transitx.userRoles.v1'
+interface SessionData {
+  student: Student
+  role: UserRole
+}
 
-type PasswordMap = Record<string, string>
+interface ApiUser {
+  id: number
+  email: string
+  phone_number: string
+  first_name: string
+  last_name: string
+  full_name: string
+  role: 'STUDENT' | 'DRIVER'
+}
 
-type RoleMap = Record<string, UserRole>
+interface AuthResponse {
+  user: ApiUser
+  access: string
+  refresh: string
+}
 
-function loadJson<T>(key: string): T | null {
+function roleFromApi(role: ApiUser['role']): UserRole {
+  return role === 'DRIVER' ? 'driver' : 'student'
+}
+
+function studentFromApi(user: ApiUser): Student {
+  return {
+    id: String(user.id),
+    fullName: user.full_name,
+    department: '',
+    faculty: '',
+    level: '',
+    phone: user.phone_number ?? '',
+    email: user.email,
+  }
+}
+
+function readSession(): SessionData | null {
   try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : null
+    const raw = localStorage.getItem(SESSION_KEY)
+    return raw ? (JSON.parse(raw) as SessionData) : null
   } catch {
     return null
   }
 }
 
-function loadPasswords(): PasswordMap {
-  return loadJson<PasswordMap>(PASSWORDS_KEY) ?? {}
-}
-
-function savePasswords(map: PasswordMap): void {
-  localStorage.setItem(PASSWORDS_KEY, JSON.stringify(map))
-}
-
-function loadRoles(): RoleMap {
-  return loadJson<RoleMap>(ROLES_KEY) ?? {}
-}
-
-function saveRoles(map: RoleMap): void {
-  localStorage.setItem(ROLES_KEY, JSON.stringify(map))
-}
-
-function roleForStudent(studentId: string): UserRole {
-  return loadRoles()[studentId] ?? 'student'
-}
-
-/** Seed demo accounts, passwords and roles on first launch. */
-function ensureSeedData(): void {
-  const current = backend.getDb()
-  if (current.students.length === 0) {
-    MOCK_STUDENTS.forEach((s) => backend.addStudent(s))
-  }
-
-  const passwords = loadPasswords()
-  const roles = loadRoles()
-  let changed = false
-
-  MOCK_STUDENTS.forEach((s) => {
-    if (!passwords[s.id]) {
-      passwords[s.id] = DEMO_ACCOUNT.password
-      changed = true
-    }
-    if (!roles[s.id]) {
-      roles[s.id] = 'student'
-      changed = true
-    }
-  })
-
-  // A demo driver so the driver dashboard can be reached by logging in.
-  if (!backend.getStudents().some((s) => s.email === DEMO_DRIVER_ACCOUNT.email)) {
-    const demoDriver: Student = {
-      id: 'st-demo-driver',
-      fullName: MOCK_DRIVERS[2].name,
-      department: '',
-      faculty: '',
-      level: '',
-      phone: MOCK_DRIVERS[2].phone,
-      email: DEMO_DRIVER_ACCOUNT.email,
-    }
-    backend.addStudent(demoDriver)
-    if (!passwords[demoDriver.id]) {
-      passwords[demoDriver.id] = DEMO_DRIVER_ACCOUNT.password
-      changed = true
-    }
-    if (!roles[demoDriver.id]) {
-      roles[demoDriver.id] = 'driver'
-      changed = true
-    }
-  }
-
-  if (changed) {
-    savePasswords(passwords)
-    saveRoles(roles)
+function saveSession(student: Student, role: UserRole): void {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ student, role } satisfies SessionData))
+  } catch {
+    /* storage unavailable */
   }
 }
 
-function normalizeIdentifier(value: string): string {
-  return value.trim().toLowerCase()
+function clearSession(): void {
+  try {
+    localStorage.removeItem(SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/** "First Second Names" -> { first_name, last_name } for the backend. */
+function splitFullName(fullName: string): { first_name: string; last_name: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  return {
+    first_name: parts[0] ?? '',
+    last_name: parts.slice(1).join(' ') ?? '',
+  }
+}
+
+function buildRegisterBody(payload: RegisterPayload, role: UserRole): Record<string, string> {
+  const password = payload.password
+  if (!password) {
+    // Never invent a password: a weak default would be a real account compromise.
+    throw new Error('Choose a password before creating your account.')
+  }
+  if (payload.confirmPassword !== password) {
+    throw new Error('The two passwords do not match.')
+  }
+
+  const body: Record<string, string> = {
+    email: payload.email.trim().toLowerCase(),
+    password,
+    confirm_password: payload.confirmPassword,
+    role: role === 'driver' ? 'DRIVER' : 'STUDENT',
+    first_name: payload.firstName.trim(),
+    last_name: payload.lastName.trim(),
+  }
+  if (payload.phone?.trim()) body.phone_number = payload.phone.trim()
+  if (payload.googleIdToken) body.google_id_token = payload.googleIdToken
+  return body
 }
 
 export class AuthService {
-  /** Log in with email/phone and password. Throws Error on failure. */
+  /** Log in with email and password. Throws Error on failure. */
   async login(identifier: string, password: string): Promise<Student> {
-    await delay(800)
-    ensureSeedData()
-
-    const key = normalizeIdentifier(identifier)
-    const student = backend.getStudents().find(
-      (s) => normalizeIdentifier(s.email) === key || s.phone.replace(/\s+/g, '') === identifier.replace(/\s+/g, ''),
-    )
-
-    if (!student) {
-      throw new Error('No account found with that email or phone number.')
-    }
-    const passwords = loadPasswords()
-    if (passwords[student.id] !== password) {
-      throw new Error('Incorrect password. Please try again.')
+    const email = identifier.trim()
+    if (!email.includes('@')) {
+      throw new Error('Sign-in uses email. Enter the email you registered with.')
     }
 
-    backend.persistSession(student.id)
-    backend.persistRole(roleForStudent(student.id))
+    const data = await apiClient.post<AuthResponse>('/auth/login/', {
+      email: email.toLowerCase(),
+      password,
+    })
+
+    const student = studentFromApi(data.user)
+    const role = roleFromApi(data.user.role)
+    apiClient.setTokens(data.access, data.refresh)
+    saveSession(student, role)
     return student
   }
 
-  /** Register a new account. Throws Error on validation failure. */
+  /** Register a new account on the API. Throws Error on validation failure. */
   async register(payload: RegisterPayload, role: UserRole = 'student'): Promise<Student> {
-    await delay(1000)
-    ensureSeedData()
+    const data = await apiClient.post<AuthResponse>('/auth/register/', buildRegisterBody(payload, role))
 
-    const email = normalizeIdentifier(payload.email)
-    const phone = (payload.phone ?? '').replace(/\s+/g, '')
-    const exists = backend.getStudents().some(
-      (s) => normalizeIdentifier(s.email) === email || s.phone.replace(/\s+/g, '') === phone,
-    )
-    if (exists) {
-      throw new Error('An account with this email or phone number already exists.')
-    }
-
-    const student: Student = {
-      id: crypto.randomUUID(),
-      fullName: payload.fullName.trim(),
-      department: payload.department?.trim() ?? '',
-      faculty: payload.faculty?.trim() ?? '',
-      level: payload.level ?? '',
-      phone: payload.phone?.trim() ?? '',
-      email: payload.email.trim().toLowerCase(),
-      ...(payload.matricNumber ? { matricNumber: payload.matricNumber.trim() } : {}),
-    }
-
-    backend.addStudent(student)
-    const passwords = loadPasswords()
-    passwords[student.id] = payload.password || 'password123'
-    savePasswords(passwords)
-
-    const roles = loadRoles()
-    roles[student.id] = role
-    saveRoles(roles)
-
-    backend.persistSession(student.id)
-    backend.persistRole(role)
+    const student = studentFromApi(data.user)
+    const storedRole = roleFromApi(data.user.role)
+    apiClient.setTokens(data.access, data.refresh)
+    saveSession(student, storedRole)
     return student
   }
 
-  /** Restore the session for the currently logged-in user, if any. */
+  /**
+   * Exchange a Google ID token for the identity fields registration may use.
+   *
+   * The token is verified server-side; the response contains only the email and
+   * the first/last name taken from the Google profile.
+   */
+  async resolveGoogleIdentity(idToken: string): Promise<VerifiedGoogleIdentity> {
+    return apiClient.post<VerifiedGoogleIdentity>('/auth/google/identity/', { id_token: idToken })
+  }
+
+  /** Restore the session for the currently signed-in user, if any. */
   async getSession(): Promise<Student | null> {
-    const studentId = backend.readSession()
-    if (!studentId) return null
-    ensureSeedData()
-    const student = backend.findStudent(studentId)
-    if (!student) return null
-    backend.persistRole(roleForStudent(student.id))
-    return student
+    if (!apiClient.hasTokens()) return null
+    try {
+      const user = await apiClient.get<ApiUser>('/auth/me/', { auth: true })
+      const student = studentFromApi(user)
+      saveSession(student, roleFromApi(user.role))
+      return student
+    } catch {
+      apiClient.clearTokens()
+      return null
+    }
   }
 
-  /** Role of the current session. Falls back to 'student' when none stored. */
+  /** Role of the current session. Falls back to 'student' when not stored. */
   getRole(): UserRole {
-    return backend.readRole() ?? 'student'
+    const session = readSession()
+    if (session?.role === 'student' || session?.role === 'driver') return session.role
+    return 'student'
   }
 
-  /** Update the signed-in student's profile (mock — backend-owned in production). */
-  async updateProfile(studentId: string, updates: Partial<Student>): Promise<Student> {
-    await delay(500)
-    const current = backend.findStudent(studentId)
-    if (!current) throw new Error('Student not found.')
-    return backend.updateStudent({ ...current, ...updates })
+  /** Update profile fields the backend supports (name and phone). */
+  async updateProfile(_studentId: string, updates: Partial<Student>): Promise<Student> {
+    const body: { first_name?: string; last_name?: string; phone_number?: string } = {}
+    if (updates.fullName !== undefined) {
+      const names = splitFullName(updates.fullName)
+      body.first_name = names.first_name
+      body.last_name = names.last_name
+    }
+    if (updates.phone !== undefined) {
+      body.phone_number = updates.phone.trim()
+    }
+
+    const user = await apiClient.patch<ApiUser>('/auth/me/', body, { auth: true })
+    const previous = readSession()?.student
+    const serverFields = studentFromApi(user)
+
+    // The backend has no department/faculty/level, so keep the values the user
+    // just submitted (or their previous client-side values) rather than wiping them.
+    const merged: Student = {
+      ...previous,
+      ...serverFields,
+      id: String(user.id),
+      department: updates.department ?? previous?.department ?? serverFields.department,
+      faculty: updates.faculty ?? previous?.faculty ?? serverFields.faculty,
+      level: updates.level ?? previous?.level ?? serverFields.level,
+    }
+    saveSession(merged, roleFromApi(user.role))
+    return merged
+  }
+
+  /** Change the signed-in user's password on the API. */
+  async changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    await apiClient.post(
+      '/auth/change-password/',
+      { old_password: oldPassword, new_password: newPassword },
+      { auth: true },
+    )
   }
 
   logout(): void {
-    backend.clearSession()
-    backend.clearRole()
+    apiClient.clearTokens()
+    clearSession()
   }
 }
 

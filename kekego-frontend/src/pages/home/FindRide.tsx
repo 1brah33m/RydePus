@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
-import { CAMPUS_LOCATIONS } from '../../mock/data'
+import { getLocation } from '../../config/locations'
 import { AppHeader } from '../../components/navigation/AppHeader'
 import { useApp } from '../../context/AppContext'
 import { useGroupJoin } from '../../hooks/useGroupJoin'
@@ -20,8 +20,8 @@ export function FindRide() {
 
   const pickupId = params.get('pickup') ?? ''
   const destinationId = params.get('destination') ?? ''
-  const pickup = CAMPUS_LOCATIONS.find((l) => l.id === pickupId)
-  const destination = CAMPUS_LOCATIONS.find((l) => l.id === destinationId)
+  const pickup = getLocation(pickupId)
+  const destination = getLocation(destinationId)
   const seats = Math.min(4, Math.max(1, Number(params.get('seats')) || 1))
 
   const groups = useMemo(

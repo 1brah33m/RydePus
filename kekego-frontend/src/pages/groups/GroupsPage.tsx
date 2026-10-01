@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Clock, Plus, Users, ArrowRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useGroupJoin } from '../../hooks/useGroupJoin'
-import { groupSeatCount } from '../../services/mockBackend'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -60,7 +59,7 @@ export function GroupsPage() {
           <div className="min-w-0 flex-1">
             <RouteIndicator pickup={activeGroup.pickup} destination={activeGroup.destination} />
             <p className="mt-0.5 text-xs text-ink-500 dark:text-slate-400">
-              {groupSeatCount(activeGroup)}/{activeGroup.maxSize} passengers · You're in this group
+              {activeGroup.seatsFilled}/{activeGroup.maxSize} passengers · You're in this group
             </p>
           </div>
           <Button size="sm" to={`/groups/${activeGroup.id}`}>
@@ -129,10 +128,10 @@ function WaitingGroupCard({
   joining: boolean
   onJoin: () => void
 }) {
-  const occupied = groupSeatCount(group)
+  const occupied = group.seatsFilled
   const mins = minutesToDeparture(group)
   const driver = driverStatus(group)
-  const joinable = group.status === 'WAITING'
+  const joinable = group.status === 'WAITING' && occupied < group.maxSize
   const leavingLabel = mins < 1 ? 'Leaving soon' : `Leaving in: ${mins} min${mins === 1 ? '' : 's'}`
 
   return (

@@ -1,87 +1,122 @@
-import type { CampusLocation, Group, GroupMember } from '../types'
-import { delay } from '../utils/delay'
-import { isGroupCancellationLocked } from '../utils/rideStatus'
-import * as backend from './mockBackend'
+import type { CampusLocation, Group, GroupMember, GroupStatus } from '../types'
+import { findLocation } from '../config/locations'
+import { CURRENCY, GROUP_SEATS } from '../config/pricing'
+import { apiClient } from './apiClient'
 
 /**
- * Group service.
+ * Group service — wired to the Django backend.
  *
- * Mock implementation. Swap the internals with real HTTP calls later:
- *   GET  /api/v1/groups
- *   POST /api/v1/groups
- *   POST /api/v1/groups/{id}/join
- *   POST /api/v1/groups/{id}/cancel
+ *   GET  /api/v1/groups/          -> getGroups()
+ *   POST /api/v1/groups/          -> createGroup()
+ *   POST /api/v1/groups/{id}/join -> joinGroup()
+ *   POST /api/v1/groups/{id}/leave-> leaveGroup()
+ *   POST /api/v1/groups/{id}/buyout-> buyOutSeats()
+ *   POST /api/v1/groups/{id}/cancel -> cancelGroup()
  *
- * The UI only ever consumes the results of these methods.
+ * The backend owns membership, capacity and status; the UI never enforces
+ * business rules locally.
  */
+
+export interface ApiGroupMember {
+  id: number
+  name: string
+  is_creator: boolean
+}
+
+export interface ApiGroup {
+  id: number
+  name: string
+  pickup_location: string
+  destination: string
+  capacity: number
+  status: 'WAITING' | 'FULL'
+  member_count: number
+  bought_seats: number
+  seats_filled: number
+  created_by: number
+  created_by_name: string
+  members: ApiGroupMember[]
+  my_membership: boolean
+  created_at: string
+  updated_at: string
+}
 
 export interface CreateGroupInput {
   pickup: CampusLocation
   destination: CampusLocation
-  member: GroupMember
+}
+
+export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
+  const members: GroupMember[] = api.members.map((m) => ({
+    id: String(m.id),
+    name: m.name,
+    seats: 1,
+    isCurrentUser: currentMemberId !== undefined && String(m.id) === currentMemberId,
+  }))
+
+  const status: GroupStatus = api.status === 'FULL' ? 'FULL' : 'WAITING'
+  const seatsFilled = Math.min(api.capacity, api.seats_filled ?? members.length)
+
+  return {
+    id: String(api.id),
+    code: api.name,
+    pickup: findLocation(api.pickup_location),
+    destination: findLocation(api.destination),
+    members,
+    maxSize: api.capacity,
+    status,
+    createdAt: api.created_at,
+    tripId: undefined,
+    boughtSeats: api.bought_seats ?? 0,
+    seatsFilled,
+    isDispatchable: members.length + (api.bought_seats ?? 0) >= api.capacity,
+  }
 }
 
 export class GroupService {
-  /** All currently pending groups across campus. */
-  async getGroups(): Promise<Group[]> {
-    await delay(450)
-    return backend.getGroups()
+  /** All currently open groups across campus. */
+  async getGroups(currentMemberId?: string): Promise<Group[]> {
+    const groups = await apiClient.get<ApiGroup[]>('/groups/', { auth: true })
+    return groups.map((g) => mapGroup(g, currentMemberId))
   }
 
-  /** Groups matching an exact pickup + destination route. */
-  async getGroupsByRoute(pickupId: string, destinationId: string): Promise<Group[]> {
-    await delay(450)
-    return backend
-      .getGroups()
-      .filter((g) => g.pickup.id === pickupId && g.destination.id === destinationId)
+  /** Create a new group; the creator becomes its first member. */
+  async createGroup(input: CreateGroupInput, currentMemberId?: string): Promise<Group> {
+    const api = await apiClient.post<ApiGroup>(
+      '/groups/',
+      {
+        name: `${input.pickup.name} → ${input.destination.name}`,
+        pickup_location: input.pickup.name,
+        destination: input.destination.name,
+        capacity: GROUP_SEATS,
+      },
+      { auth: true },
+    )
+    return mapGroup(api, currentMemberId)
   }
 
-  /** Create a new group for the current student. */
-  async createGroup(input: CreateGroupInput): Promise<Group> {
-    await delay(600)
-    return backend.createGroup(input.pickup, input.destination, input.member)
+  /** Join an existing group. The backend rejects full/closed groups. */
+  async joinGroup(groupId: string, currentMemberId?: string): Promise<Group> {
+    const api = await apiClient.post<ApiGroup>(`/groups/${groupId}/join/`, undefined, { auth: true })
+    return mapGroup(api, currentMemberId)
   }
 
-  /** Join an existing group. The backend rejects join attempts on full/closed groups. */
-  async joinGroup(groupId: string, member: GroupMember): Promise<Group> {
-    await delay(600)
-    return backend.addGroupMember(groupId, member)
-  }
-
-  /** Cancel the current student's membership / group request. */
-  async cancelGroup(groupId: string): Promise<void> {
-    await delay(400)
-    const group = backend.getGroups().find((g) => g.id === groupId)
-    if (group && isGroupCancellationLocked(group.status)) {
-      throw new Error(
-        'A driver has already accepted your ride. Cancellation is no longer available; please contact support or your driver if necessary.',
-      )
-    }
-    backend.removeGroup(groupId)
+  /**
+   * Pay for every remaining seat so the group can leave straight away.
+   * The backend requires the exact number of remaining seats.
+   */
+  async buyOutSeats(groupId: string, seats: number, amount: number): Promise<void> {
+    await apiClient.post(`/groups/${groupId}/buyout/`, { seats, amount, currency: CURRENCY }, { auth: true })
   }
 
   /** Leave a group while keeping it alive for the remaining passengers. */
-  async leaveGroup(groupId: string): Promise<Group | null> {
-    await delay(400)
-    return backend.leaveGroup(groupId)
+  async leaveGroup(groupId: string): Promise<void> {
+    await apiClient.post<void>(`/groups/${groupId}/leave/`, undefined, { auth: true })
   }
 
-  /** Fill the remaining seats of a group (buyout) so it departs immediately. */
-  async buyOutRemainingSeats(groupId: string, additionalSeats: number, member: GroupMember): Promise<Group> {
-    await delay(500)
-    return backend.buyOutRemainingSeats(groupId, additionalSeats, member)
-  }
-
-  /** Internal: used by the mock "backend" simulation to add passengers over time. */
-  async simulatePassengerJoin(groupId: string, member: GroupMember): Promise<Group> {
-    await delay(120)
-    return backend.addGroupMember(groupId, member)
-  }
-
-  /** Internal: advance a group's lifecycle status during simulation. */
-  async updateStatus(groupId: string, status: Group['status']): Promise<Group> {
-    await delay(60)
-    return backend.setGroupStatus(groupId, status)
+  /** Cancel the group (creator only). Pending trips are cancelled too. */
+  async cancelGroup(groupId: string): Promise<void> {
+    await apiClient.post<void>(`/groups/${groupId}/cancel/`, undefined, { auth: true })
   }
 }
 

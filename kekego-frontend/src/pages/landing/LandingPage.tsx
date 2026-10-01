@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Briefcase,
   Camera,
-  CarFront,
   CircleUserRound,
   Menu,
   MessageCircle,
@@ -15,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { RMark } from '../../components/ui/Logo'
 
 /** Hardcoded campus landmarks used in the booking card dropdowns. */
 const LANDMARKS = [
@@ -76,11 +76,12 @@ function Navbar() {
     <nav className="sticky top-0 z-30 bg-charcoal/95 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <button type="button" onClick={() => scrollTo('home')} className="flex items-center gap-2" aria-label="Rydepus home">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-brand-600 text-white">
-            <CarFront aria-hidden className="size-5" strokeWidth={2.2} />
+          <span className="flex size-9 items-center justify-center rounded-full bg-brand-500/25">
+            <RMark tone="dark" className="text-lg" />
           </span>
-          <span className="text-xl font-extrabold tracking-tight text-white">
-            Ryde<span className="text-brand-400">pus</span>
+          <span className="flex flex-col text-lg font-extrabold leading-[1.1] tracking-tight text-white">
+            <span>Ryde</span>
+            <span className="text-brand-400">pus</span>
           </span>
         </button>
 
@@ -415,11 +416,12 @@ function FooterSection() {
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div>
             <span className="flex items-center gap-2">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-brand-600 text-white">
-                <CarFront aria-hidden className="size-5" strokeWidth={2.2} />
+              <span className="flex size-9 items-center justify-center rounded-full bg-brand-500/25">
+                <RMark tone="dark" className="text-lg" />
               </span>
-              <span className="text-xl font-extrabold tracking-tight">
-                Ryde<span className="text-brand-400">pus</span>
+              <span className="flex flex-col text-lg font-extrabold leading-[1.1] tracking-tight">
+                <span>Ryde</span>
+                <span className="text-brand-400">pus</span>
               </span>
             </span>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/55">

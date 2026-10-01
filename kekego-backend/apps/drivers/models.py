@@ -15,9 +15,6 @@ class DriverProfile(models.Model):
         on_delete=models.CASCADE,
         related_name="driver_profile",
     )
-    # Driver accounts created through public registration start unverified.
-    # Based on verification they cannot operate (go online, view/accept trips).
-    is_verified = models.BooleanField(default=False)
     availability_status = models.CharField(
         max_length=20,
         choices=AvailabilityStatus.choices,
@@ -26,8 +23,13 @@ class DriverProfile(models.Model):
     vehicle_type = models.CharField(max_length=80, blank=True, default="")
     vehicle_plate = models.CharField(max_length=30, blank=True, default="")
     license_number = models.CharField(max_length=80, blank=True, default="")
+    is_verified = models.BooleanField(default=False)
     preferred_pickup_location = models.CharField(max_length=255, blank=True, default="")
     preferred_destination = models.CharField(max_length=255, blank=True, default="")
+    # Payout details, shared with students who pay by direct bank transfer.
+    bank_name = models.CharField(max_length=120, blank=True, default="")
+    account_number = models.CharField(max_length=20, blank=True, default="")
+    account_name = models.CharField(max_length=120, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -36,34 +38,10 @@ class DriverProfile(models.Model):
         verbose_name_plural = "Driver profiles"
         ordering = ("-created_at",)
 
+    @property
+    def has_payout_details(self):
+        """True once the driver can receive a direct bank transfer."""
+        return bool(self.bank_name and self.account_number and self.account_name)
+
     def __str__(self) -> str:
         return f"{self.user.email} ({self.availability_status})"
-
-    def has_active_trip(self) -> bool:
-        """True when the driver is assigned to a running trip."""
-        from apps.trips.models import Trip
-
-        return self.user.assigned_trips.filter(
-            status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS],
-        ).exists()
-
-    def can_transition_to(self, target) -> bool:
-        """Validate a driver-requested availability change.
-
-        ``BUSY`` is system-managed (set when a trip is accepted and cleared
-        when it is completed/cancelled), so the API can never set it directly.
-        Manual changes are also blocked while the driver still has an active
-        trip so availability cannot drift out of sync with reality.
-        """
-        if target not in DriverProfile.AvailabilityStatus.values:
-            return False
-        if target == DriverProfile.AvailabilityStatus.BUSY:
-            return False
-        if target == self.availability_status:
-            return True
-        if self.has_active_trip():
-            return False
-        return target in (
-            DriverProfile.AvailabilityStatus.ONLINE,
-            DriverProfile.AvailabilityStatus.OFFLINE,
-        )

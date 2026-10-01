@@ -1,4 +1,4 @@
-import { CURRENCY } from '../mock/data'
+import { CURRENCY } from '../config/pricing'
 
 const NGN_SYMBOL = '₦'
 

@@ -159,9 +159,16 @@ AUTH_USER_MODEL = "users.User"
 # ---------------------------------------------------------------------------
 # Authentication / passwords
 # ---------------------------------------------------------------------------
+# Minimum accepted password length. The registration endpoint also enforces it
+# and the frontend mirrors the same number, so one rule is reported to users.
+PASSWORD_MIN_LENGTH = env.int("DJANGO_PASSWORD_MIN_LENGTH", default=10)
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": PASSWORD_MIN_LENGTH},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -169,6 +176,14 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
+
+# Google sign-in. The web client ID is public by design; the account linking
+# secret (client secret) is never needed because the backend only verifies
+# Google ID tokens it is handed. When this is empty, Google sign-in is off.
+GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")
+
+# Optional: restrict which Google accounts may register (e.g. a campus domain).
+GOOGLE_ALLOWED_EMAIL_DOMAIN = env("GOOGLE_ALLOWED_EMAIL_DOMAIN", default="")
 
 # ---------------------------------------------------------------------------
 # Django REST Framework

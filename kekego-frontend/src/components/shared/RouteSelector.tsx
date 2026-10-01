@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MapPin } from 'lucide-react'
-import { CAMPUS_LOCATIONS } from '../../mock/data'
+import { CAMPUS_LOCATIONS } from '../../config/locations'
 import type { CampusLocation } from '../../types'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'

@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['pwa/icon-192.png', 'pwa/icon-512.png', 'pwa/icon-maskable-512.png', 'pwa/apple-touch-icon.png'],
+      includeAssets: ['pwa/icon-192.png'],
       manifest: {
         name: 'Rydepus - Campus Shuttle & Rides',
         short_name: 'Rydepus',
@@ -27,17 +27,6 @@ export default defineConfig({
             src: 'pwa/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
-          },
-          {
-            src: 'pwa/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
-          {
-            src: 'pwa/icon-maskable-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
           },
         ],
       },

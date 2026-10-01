@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, MapPin, Crosshair, Users } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
-import { groupSeatCount } from '../../services/mockBackend'
-import { CAMPUS_LOCATIONS, FARE_PER_SEAT } from '../../mock/data'
+import { CAMPUS_LOCATIONS } from '../../config/locations'
+import { groupFare } from '../../config/pricing'
 import type { Group, Trip } from '../../types'
 import { LANDING_KEY } from '../../utils/keys'
 import { formatCurrency } from '../../utils/format'
@@ -205,8 +205,8 @@ export function Home() {
 }
 
 function PoolOfferCard({ group, onOpen }: { group: Group; onOpen: () => void }) {
-  const occupied = groupSeatCount(group)
-  const poolFare = FARE_PER_SEAT * group.maxSize
+  const occupied = group.seatsFilled
+  const poolFare = groupFare(group.pickup.id, group.destination.id)
 
   return (
     <button
@@ -245,7 +245,7 @@ function LiveTripBanner({ group, trip }: { group: Group | null; trip: Trip | nul
     : `${group!.pickup.name} → ${group!.destination.name}`
   const status = trip ? tripStatusLabel(trip.status) : groupStatusLabel(group!.status)
   const href = trip ? `/trips/${trip.id}` : `/groups/${group!.id}`
-  const count = group ? `${groupSeatCount(group)}/${group.maxSize}` : '4/4'
+  const count = group ? `${group.seatsFilled}/${group.maxSize}` : '4/4'
   const progress = progressFor(trip ? trip.status : (group!.status as string))
 
   return (

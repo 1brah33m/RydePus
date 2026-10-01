@@ -14,6 +14,7 @@ const GROUP_LABELS: Record<GroupStatus, string> = {
 }
 
 const TRIP_LABELS: Record<TripStatus, string> = {
+  PENDING: 'Pending',
   DRIVER_ASSIGNED: 'Driver found',
   DRIVER_ACCEPTED: 'Driver accepted',
   IN_PROGRESS: 'On the way',

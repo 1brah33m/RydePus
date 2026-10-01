@@ -20,7 +20,12 @@ SCALE = max(1, int(os.environ.get("LOAD_SCALE", "3")))
 
 @pytest.mark.load
 @pytest.mark.django_db
-def test_large_group_list_is_paginated(student_user, student_client):
+def test_large_group_list_stays_bounded_in_queries(student_user, student_client, django_assert_max_num_queries):
+    """The group list returns every group but must not query per group.
+
+    The endpoint answers with a plain list (not a paginated envelope), so the
+    regression this guards against is an N+1 that grows with the dataset.
+    """
     total = 50 * SCALE
     for idx in range(total):
         Group.objects.create(
@@ -31,29 +36,41 @@ def test_large_group_list_is_paginated(student_user, student_client):
             created_by=student_user,
         )
 
-    response = student_client.get("/api/v1/groups/")
+    # groups + members + user memberships + buyout aggregate, plus auth/session.
+    with django_assert_max_num_queries(8):
+        response = student_client.get("/api/v1/groups/")
+
     assert response.status_code == 200
     body = response.json()
-    assert body["count"] == total
-    assert len(body["results"]) == 20  # default PAGE_SIZE
-    assert body["page"] == 1
+    assert isinstance(body, list)
+    assert len(body) == total
+    assert {row["name"] for row in body} >= {f"Group {idx}" for idx in range(5)}
 
 
 @pytest.mark.load
 @pytest.mark.django_db
-def test_page_size_capped_at_max_pages(student_user, student_client):
-    total = 50 * SCALE
-    for idx in range(total):
+def test_group_list_query_count_is_independent_of_dataset_size(student_user, student_client, django_assert_num_queries):
+    """Doubling the dataset must not add queries."""
+    Group.objects.create(
+        name="Solo",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    with django_assert_num_queries(3) as small:
+        student_client.get("/api/v1/groups/")
+
+    for idx in range(20):
         Group.objects.create(
-            name=f"Cap {idx}",
+            name=f"Bulk {idx}",
             pickup_location="Gate",
             destination="Hostel",
             capacity=4,
             created_by=student_user,
         )
+    with django_assert_num_queries(3) as large:
+        response = student_client.get("/api/v1/groups/")
 
-    response = student_client.get("/api/v1/groups/", {"page_size": 10_000})
-    assert response.status_code == 200
-    body = response.json()
-    assert body["page_size"] == 100
-    assert len(body["results"]) == 100
+    assert len(response.json()) == 21
+    assert len(small.captured_queries) == len(large.captured_queries)

@@ -2,18 +2,15 @@
 
 **Project:** TransitX / KekeGo Backend  
 **Framework:** Django 5.x and Django REST Framework  
-**Report date:** 2026-09-23
+**Report date:** 2026-09-20
 
 ## 1. Executive Summary
 
 The TransitX backend is implemented as a modular Django monolith for a student transportation platform. It provides authentication, role-based access, driver availability, ride groups, trip lifecycle management, payment records and buyout payment intents, and notifications.
 
-The backend is currently suitable as a tested MVP foundation with security, payment, and operational hardening. It is not yet fully production-ready because route-specific driver matching, frontend contract alignment, external provider verification, and staging deployment validation remain outstanding.
+The backend is currently suitable as a tested MVP foundation. It is not yet production-complete because route-specific driver matching, trip ratings, an in-app wallet, buyout refunds, frontend contract alignment, operational hardening, and production deployment validation remain outstanding.
 
-The backend validates with **121 tests collected, 118 passing, 3 skipped on
-SQLite** (the 3 skips are PostgreSQL-only concurrency tests). The production
-hardening release adds refunds, reconciliation, monitoring, backups, CI, and
-the finalized API contract. PostgreSQL-backed concurrency coverage runs in CI.
+The latest relevant backend validation completed successfully with **46 tests passing**.
 
 ## 2. Architecture
 
@@ -23,7 +20,7 @@ The project is organized into domain-focused Django applications:
 - `apps.drivers`: driver profiles and availability state.
 - `apps.groups`: student ride groups and memberships.
 - `apps.trips`: trip creation, driver discovery, assignment, status transitions, and student cancellation.
-- `apps.payments`: completed-trip payments and group buyout payment intents.
+- `apps.payments`: manual trip payments (cash or direct bank transfer) with driver confirmation, and group buyout payment intents.
 - `apps.notifications`: notification records, notification tasks, and read-state endpoints.
 - `config`: settings, URL registration, health checks, error handlers, Celery, logging, and API documentation.
 
@@ -48,7 +45,6 @@ Implemented authentication features:
 - Password changes
 - Role-based permission classes
 - Shared JSON error handling for authentication and permission failures
-- Password-versioned JWTs that become invalid after a password change
 
 Main endpoints:
 
@@ -72,6 +68,8 @@ Implemented features:
   - `ONLINE`
   - `BUSY`
 - Availability updates
+- Payout details: `bank_name`, `account_number`, `account_name`, all required together, with the account number normalised to at least 10 digits
+- A read-only `has_payout_details` flag, also used to decide whether a student sees the direct-transfer option
 - Online-driver trip discovery
 - Atomic trip acceptance
 - Driver state changes to `BUSY` after accepting a trip
@@ -82,6 +80,7 @@ Endpoints:
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/drivers/me/` | Driver | Retrieve the driver profile |
 | `PATCH` | `/api/v1/drivers/availability/` | Driver | Change availability |
+| `PATCH` | `/api/v1/drivers/payout/` | Driver | Save the bank account for fare transfers |
 | `GET` | `/api/v1/trips/available/` | Online driver | List pending unassigned trips |
 | `POST` | `/api/v1/trips/{id}/accept/` | Online driver | Claim a pending trip |
 
@@ -113,16 +112,21 @@ Endpoints:
 | `POST` | `/api/v1/groups/{id}/join/` | Student | Join a group |
 | `POST` | `/api/v1/groups/{id}/leave/` | Student member | Leave an uncommitted group |
 | `POST` | `/api/v1/groups/{id}/cancel/` | Group creator | Cancel an uncommitted group |
-| `POST` | `/api/v1/groups/{id}/buyout/` | Student member | Create a pending buyout payment intent |
+| `POST` | `/api/v1/groups/{id}/buyout/` | Student member | Pay for all remaining seats so the group can depart |
 
 Group behavior:
 
+- Every group is a 4-seat ride: capacity is fixed at 4 and any other value is rejected.
 - The creator is automatically added as the first member.
-- A group cannot exceed its configured capacity.
+- Occupied seats are `members + bought seats` (capped at 4); a bought seat counts as a passenger.
+- A group is dispatchable (and `FULL`) only when all 4 seats are accounted for, either by members or by a buyout.
+- A buyout must cover *all* remaining seats, since a partial buyout would leave the group under 4/4.
+- A member cannot join a group whose 4 seats are already accounted for.
 - A member cannot leave after a trip is accepted, started, or completed.
 - A creator cannot cancel after a trip is committed.
 - The last member leaving removes the empty group.
 - Cancelling a group cancels pending related trips before deleting the group.
+- When a member leaves and the group drops below 4/4, its still-`PENDING` trip is cancelled so it never reaches a driver.
 
 The current group model represents locations as strings and does not yet expose the richer member, status, group-code, or seat metadata expected by the frontend.
 
@@ -139,8 +143,10 @@ Implemented trip statuses:
 Implemented features:
 
 - Student trip creation from a group membership
+- Conditional dispatch: a trip is only created once the group is full (4/4 members, or members plus bought seats)
+- One active trip per group, so simultaneous "fourth joiners" cannot double-dispatch
 - Student-owned trip listing
-- Driver pending-trip discovery
+- Driver pending-trip discovery, restricted to trips whose group is `FULL`
 - Driver trip acceptance
 - Driver start, completion, and cancellation transitions
 - Student cancellation of the student's own pending trip
@@ -163,7 +169,7 @@ Endpoints:
 
 The same cancel URL is role-sensitive: the student endpoint handles a student-owned pending trip, while the driver status endpoint handles an assigned driver's permitted cancellation transition.
 
-Trip ratings are still not implemented. There is no rating model, serializer, or rating endpoint.
+Trip ratings are not yet implemented. There is no rating model, serializer, or rating endpoint.
 
 ## 7. Payments Module
 
@@ -171,6 +177,11 @@ Implemented payment types:
 
 - `TRIP`
 - `GROUP_BUYOUT`
+
+Implemented payment methods:
+
+- `CASH`
+- `BANK_TRANSFER`
 
 Implemented payment statuses:
 
@@ -180,11 +191,18 @@ Implemented payment statuses:
 
 Implemented features:
 
-- Payment records for completed trips
-- Payment ownership validation
-- Completed-trip requirement
+- Manual fare payment records for trips with an assigned driver
+- Payment by cash or direct bank transfer, with no payment provider involved
+- Group-member payment ownership validation (any member may pay their own seat)
+- Assigned-driver requirement and `ACCEPTED`/`IN_PROGRESS`/`COMPLETED` payable-status check
 - Amount validation against the trip fare
-- Duplicate active-payment protection
+- Bank-transfer payments blocked until the assigned driver has saved payout details
+- Duplicate active-payment protection per trip and payer
+- Driver confirmation (sets `SUCCESSFUL` and records `confirmed_by`/`confirmed_at`) and rejection (sets `FAILED`) for reported non-payment
+- Row locking plus idempotent confirmation so a double tap or a confirm/reject race cannot settle a payment twice
+- Driver-scoped collectable payment listing, with awaiting-confirmation payments first
+- Driver payout details on `DriverProfile` (`bank_name`, `account_number`, `account_name`) with a `has_payout_details` flag
+- Trip responses expose `driver_bank` only for assigned trips whose driver has complete payout details
 - Group-linked buyout payment intents
 - Seat and capacity validation for buyout intents
 - Duplicate active buyout-intent protection
@@ -195,12 +213,18 @@ Endpoints:
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/payments/` | Student | List the student's payments |
-| `POST` | `/api/v1/payments/` | Student | Create a completed-trip payment record |
+| `POST` | `/api/v1/payments/` | Student | Record a manual cash or bank-transfer payment as `PENDING` |
+| `GET` | `/api/v1/payments/collectable/` | Driver | List fares owed to the signed-in driver |
+| `POST` | `/api/v1/payments/{id}/confirm/` | Assigned driver | Confirm cash/transfer receipt |
+| `POST` | `/api/v1/payments/{id}/reject/` | Assigned driver | Report that the money never arrived |
+| `PATCH` | `/api/v1/drivers/payout/` | Driver | Save the bank account students transfer fares to |
 | `POST` | `/api/v1/groups/{id}/buyout/` | Student member | Create a pending group-buyout payment intent |
 
-The payment system now supports a provider adapter with a development `manual` provider and Paystack initialization plus signed webhook verification. Buyout requests remain `PENDING`; the group is not marked funded until a future provider-confirmation and dispatch workflow is implemented.
+Rides are settled by hand, so no payment provider is integrated and no provider secrets are stored. The student-facing in-app wallet is a frontend placeholder: no wallet or balance model exists in the backend, and money never sits on the platform.
 
-Payment provider references, provider initialization, signed webhook verification, and idempotency-key retries are implemented. Refunds, provider reconciliation, and buyout completion workflows remain outstanding.
+Group buyout requests remain `PENDING` and are not tied to a provider confirmation; bought seats are counted immediately for dispatchability.
+
+Payment references, webhooks, provider callbacks, refunds, and idempotency keys remain unimplemented, and are not required for the cash/transfer flow.
 
 ## 8. Notifications Module
 
@@ -268,7 +292,7 @@ The current payment schema supports either a trip target or a group target, but 
 
 ## 11. Testing and Validation
 
-The previous backend suite contained **46 passing tests** covering:
+The relevant backend suite currently contains **46 passing tests** covering:
 
 - Health and API error behavior
 - Registration, login, JWT authentication, profile, and password flows
@@ -281,26 +305,26 @@ The previous backend suite contained **46 passing tests** covering:
 - Group creation and joining
 - Group leave and cancellation
 - Group buyout payment intents
-- Completed-trip payment validation
+- Manual cash/bank-transfer payment validation
 - Payment amount validation
 - Duplicate active payment protection
+- Driver payout details and manual payment confirmation/rejection
+- Trip `driver_bank` exposure rules
 - Notification listing and read behavior
-
-The latest hardening changes add regression coverage for verified-driver access, availability transitions, password-versioned tokens, payment provider flows, webhook handling, payment idempotency, group capacity and seat allocation, production settings, and restricted API documentation.
 
 Latest full-suite command:
 
 ```powershell
-python -m pytest
+$env:DJANGO_SECRET_KEY = "dev-secret-key-for-testing"
+$env:DJANGO_DEBUG = "True"
+$env:DJANGO_ALLOWED_HOSTS = "localhost,127.0.0.1,testserver"
+py -m pytest tests/test_api.py tests/test_auth.py tests/test_permissions.py tests/test_groups.py tests/test_trips.py tests/test_payments.py tests/test_notifications.py -q
 ```
 
 Latest result:
 
 ```text
-118 passed, 3 skipped in 16.97s
-
-The skipped tests document that SQLite cannot exercise `select_for_update()`
-concurrency semantics; that behavior is validated against PostgreSQL in CI.
+46 passed
 ```
 
 ## 12. Frontend Integration Status
@@ -312,9 +336,9 @@ The main data-shape differences are:
 - Frontend roles use lowercase values; backend roles use uppercase values.
 - Frontend users use `fullName` and `phone`; backend users use first/last names and `phone_number`.
 - Frontend locations are `{ id, name }` objects; backend locations are strings.
-- Frontend groups include members, seat counts, status, and group codes; backend groups currently expose capacity and `member_count`.
+- Frontend groups include members, seat counts, status, and group codes; backend groups expose capacity, `member_count`, `bought_seats`, and `seats_filled`.
 - Frontend trips use a different lifecycle vocabulary and expect driver details and ratings.
-- Frontend payments expect provider references, methods, seats, and success/failure results; backend currently exposes database payment records.
+- Frontend payments expect provider references, methods, seats, and success/failure results; backend exposes manual cash/bank-transfer records with `payer_name`, `awaiting_confirmation`, and `confirmed_at` instead of provider references.
 
 An endpoint mapping is documented in [API_FRONTEND_MAPPING.md](API_FRONTEND_MAPPING.md). The frontend integration layer should be created only after the remaining backend contracts are finalized.
 
@@ -327,10 +351,9 @@ The following work remains:
 - Route-specific driver matching
 - Driver request filtering by route and vehicle/availability criteria
 - Trip ratings and comments
-- Real payment-provider integration
-- Provider webhook verification
-- Payment references and refunds
-- Buyout confirmation that marks a group funded and creates/dispatches its trip
+- In-app wallet/balance, if the product ever moves money through the platform
+- Buyout refunds: a buyout fills seats immediately, so a cancelled trip must refund the buyer
+- Server-side trip dispatch: trips are currently created by the client when a group becomes full
 - Driver notification access and event triggers
 - Frontend/backend response-shape alignment
 
@@ -338,10 +361,11 @@ The following work remains:
 
 - Pagination for groups, trips, payments, and notifications
 - Rate limiting for authentication, joins, trip acceptance, and payment operations
+- Request idempotency keys
 - Audit logging for authentication, trip state changes, group membership, and payments
 - Stronger duplicate and concurrency rules across all write workflows
 - Consistent error-envelope handling for all serializer validation errors
-- Token blacklist-backed logout (password changes now invalidate password-versioned tokens)
+- Token revocation or blacklist-backed logout
 
 ### Production operations
 
@@ -368,7 +392,9 @@ The following work remains:
 | Student cancellation | Implemented and tested |
 | Group leave/cancellation | Implemented and tested |
 | Buyout payment intent | Implemented and tested |
-| Payment provider initialization and webhook confirmation | Implemented; production reconciliation remains |
+| Manual cash/bank-transfer payment and driver confirmation | Implemented and tested |
+| Driver payout details | Implemented and tested |
+| In-app wallet/balance | Not implemented (frontend placeholder only) |
 | Ratings | Not implemented |
 | Frontend integration | Not complete |
 | Production hardening | Not complete |
@@ -378,198 +404,8 @@ The following work remains:
 
 1. Implement trip ratings and comments.
 2. Add route-specific driver matching and driver request filtering.
-3. Integrate a real payment provider with verified webhooks.
-4. Add buyout confirmation and funded-group dispatch.
-5. Align frontend and backend data contracts.
-6. Add pagination, rate limiting, audit logging, and idempotency.
-7. Validate PostgreSQL, Redis, Celery, HTTPS, secrets, monitoring, backups, and deployment rollback.
-8. Replace the frontend mock services with the real HTTP integration layer.
-
-## 16. Latest Hardening Release (2026-09-23)
-
-This section documents only the changes introduced after the previous implementation report. The earlier MVP features remain described in sections 2 through 15.
-
-### Authentication and driver security
-
-- Public driver registration now creates an unverified driver profile by default.
-- Added `DriverProfile.is_verified` with a migration and Django admin support.
-- Unverified drivers cannot go online, discover available trips, or accept trips.
-- Driver availability transitions are validated in the model and view layer:
-  - Drivers cannot set themselves directly to `BUSY`; that state is system-managed.
-  - Drivers with an active accepted or in-progress trip cannot change availability manually.
-  - Completing or cancelling an assigned trip releases the driver back to `ONLINE`.
-- Password changes now update `User.password_changed_at`.
-- Access and refresh tokens include a password-version claim (`pwv`). Tokens issued before a password change are rejected by authentication and refresh flows.
-- Registration and login token creation use the password-aware token pair, while the refresh endpoint validates the token against the current password version.
-
-### Groups and seat integrity
-
-- Group capacity is validated as a positive value during creation.
-- Group creation and membership creation are transactional, with the creator assigned seat 1 automatically.
-- `GroupMember.seat` was added and assigned atomically under row locking.
-- Concurrent joins lock the group row before checking capacity, preventing over-capacity membership writes.
-- Duplicate membership and seat allocation failures are handled as deterministic validation responses.
-- Group serializers now expose member seat information where applicable.
-
-### Payment provider integration
-
-- Added `provider_reference` to `Payment` and a migration for the new field.
-- Added the provider adapter module at `apps/payments/providers.py`.
-- Added a development/test `manual` provider that creates local payment references.
-- Added Paystack initialization support with server-side amount, currency, payer, payment kind, seat, and metadata submission.
-- Production Paystack configuration requires both `PAYSTACK_SECRET_KEY` and `PAYSTACK_WEBHOOK_SECRET`.
-- Added payment initialization after payment creation, returning a provider reference and authorization URL when available.
-- Added `POST /api/v1/payments/webhook/` for provider callbacks.
-- Webhook signatures are verified before payment state changes; Paystack uses an HMAC-SHA512 signature comparison.
-- Verified successful callbacks transition the matching payment to `SUCCESSFUL` under a database transaction.
-- Added provider error handling that returns a controlled `502 PAYMENT_PROVIDER_ERROR` response when initialization fails.
-- Added payment idempotency-key handling. Retrying the same payer, trip, amount, currency, and key returns the existing payment instead of creating a duplicate; reusing a key for different payment data is rejected.
-- Provider references and payment state are treated as server-controlled fields in the API serializer.
-
-### Production configuration and deployment
-
-- Production settings now require explicit allowed hosts and a configured PostgreSQL database.
-- `DATABASE_URL` is supported alongside individual PostgreSQL environment variables.
-- Production CORS configuration is explicit and does not allow all origins.
-- Added HTTPS-ready settings including SSL redirect, forwarded-protocol handling, secure session and CSRF cookies, HSTS, frame denial, and content-type protection.
-- Payment provider selection is mandatory in production; unsupported or incomplete provider configuration fails fast during startup.
-- API schema, Swagger, and Redoc routes are opt-in through `DJANGO_ENABLE_API_DOCS` and are disabled by default in production.
-- The Docker entrypoint now derives its PostgreSQL readiness check from `DATABASE_URL` when provided and then applies migrations before starting the application.
-- Docker Compose configuration was updated for the hardened environment variables and service startup behavior.
-- Health-check failures return a generic service-unavailable message rather than exposing raw database exception details.
-- Audit logging was expanded for authentication, availability, trip, and payment events.
-
-### Tests and migrations added
-
-- Added migrations for driver verification, group-member seats, payment provider references, and password-change timestamps.
-- Added a dedicated driver test module.
-- Expanded authentication tests for password-version token invalidation and refresh behavior.
-- Expanded group tests for positive capacity, automatic creator membership, seat assignment, concurrent-safe capacity behavior, and invalid joins.
-- Expanded payment tests for provider initialization, provider references, idempotent retries, webhook signature validation, and successful webhook confirmation.
-- Expanded API, permission, and production-configuration tests for the new security and deployment behavior.
-
-### New release limitations
-
-- Trip ratings and comments are still not implemented.
-- Payment refunds, settlement reconciliation, provider retry queues, and buyout completion/dispatch are still outstanding.
-- Logout does not yet use a JWT blacklist; password changes invalidate tokens through the password-version claim.
-- The full production stack still needs PostgreSQL, Redis, Celery, HTTPS, monitoring, backup/restore, load, and rollback validation.
-
----
-
-## Addendum: Production hardening release (2026-09-24)
-
-This release closes the outstanding items from the security/payment hardening
-layer and adds the operational layer required to run in production.
-
-### Monitoring, logging, error tracking, alerting
-
-- New `config/middleware.py` `RequestLogMiddleware`: adds/echoes a correlation
-  `X-Request-ID`, emits one structured JSON access-log line per request
-  (method, path, status, latency, user, request_id), and never logs bodies,
-  query strings, credentials, or JWT headers.
-- New `config/monitoring.py`: thread-safe `Emissions` counters and a
-  best-effort `AlertNotifier` that dispatches to a webhook
-  (`ALERT_WEBHOOK_URL`) and/or email (`ALERT_EMAILS`) without ever failing the
-  request path.
-- New `config/error_tracking.py`: Sentry init/capture behind `SENTRY_DSN`;
-  clean no-op without it. Unhandled API exceptions are captured automatically
-  and returned as opaque `500 SERVER_ERROR`.
-- `config/logging_conf.py`: JSON formatter annotates every record with
-  service/environment/request_id; dedicated loggers for request/tasks/errors/
-  audit/monitor.
-- Periodic `collect_metrics` beat task snapshots counters; a `worker-heartbeat`
-  task keeps presence data in Redis (used by `/api/v1/health/ready/`).
-
-### Database backups & restore testing
-
-- `python manage.py backup_db`: uses `pg_dump --format=custom` for PostgreSQL and the
-  `sqlite3` backup API for SQLite; writes into `BACKUP_DIR` (git-ignored).
-- `python manage.py restore_db --input <file> [--target ...] [--yes]`:
-  `pg_restore --clean --if-exists` / SQLite `backup()`, refusing destructive
-  overwrites without confirmation.
-- Tested with a SQLite round-trip and an overwrite-refusal test.
-
-### Payments: webhooks, refunds, reconciliation
-
-- Added `Refund` ledger model and payment reconciliation fields
-  (`settlement_reference`, `provider_event`, `reconciled_at`,
-  `refunded_amount`, `refunded_at`) with DB constraints
-  (`amount > 0`, `seats > 0`, `0 <= refunded_amount <= amount`).
-- `POST /api/v1/payments/{id}/refund/`: the payer refunds a `SUCCESSFUL` payment
-  up to the outstanding balance; over-refund is rejected; provider errors are
-  surfaced as `502 PAYMENT_PROVIDER_ERROR`.
-- Refund webhook events (`*refund*`) confirm PENDING refunds and update the
-  ledger; unknown references return `404`.
-- `manage.py reconcile_payments` / beat task `payments.reconcile` calls the
-  provider's `verify_transaction` (Paystack) and aligns local state: confirm
-  `PENDING` to `SUCCESSFUL`, mark provider failures `FAILED`, and capture settlement
-  references. Verified locally against the manual provider.
-
-### Notification & Celery task reliability
-
-- `create_notification` retries with exponential backoff
-  (autoretry, ~1 h horizon) and sets `is_sent`/`sent_at`; duplicates are
-  collapsed via `get_or_create`.
-- `retry_undelivered` beat task re-drives notifications the worker never
-  finished dispatching (self-healing delivery loop).
-- Celery durability settings enabled in production (`acks_late`,
-  `reject_on_worker_lost`, etc.); worker task success/failure signals maintain
-  the monitoring counters.
-
-### Pagination & query optimization
-
-- Shared `config.pagination.py` envelope `{count, page, page_size, results}`
-  used by every list endpoint; `page_size` capped at 100.
-- All list views now `select_related`/`prefetch_related`; model indexes added
-  for group route/creator, trip status/route/driver/creator, membership user,
-  notification read/sent, payment payer/status.
-- Light load smoke tests (`mark=load`) guard against pagination/perf
-  regressions; a standalone `scripts/loadtest.py` hits a running deployment.
-
-### Validation contracts
-
-- Fares: `>= 0.01` at API and DB level (was `>= 0`).
-- Coordinates: WGS84 range constraints (`lat in [-90,90]`,
-  `lng in [-180,180]`) at API and DB for groups and trips; pairs must be
-  provided together.
-- Seats/capacity: group capacity `1..12`; member seats `1..12`; buyout seats
-  bounded by remaining capacity.
-- Trip states: transition guard (`can_transition_to`) enforced in the status
-  view; ratings `1..5` DB-checked and single-per-rater (`DUPLICATE` 409).
-
-### API versioning & contract
-
-- Versioned namespace `/api/v1/...`; finalized `API_CONTRACT.md` documents the
-  error envelope (with `request_id` + optional `errors`), pagination envelope,
-  idempotency keys, webhook semantics, rate limiting, and the full endpoint
-  catalog.
-- drf-spectacular `VERSION=1.0.0`, schema tags plus openapi override.
-
-### CI (`.github/workflows/ci.yml`)
-
-- Tests: Django checks, `makemigrations --check --dry-run`, `check --deploy`,
-  full pytest (SQLite), ruff lint + format, bandit (fail on medium+), a
-  secret/backup-file scan, and concurrency+integration tests against a
-  PostgreSQL 16 service container.
-
-### Now implemented (previously outstanding)
-
-- Trip ratings/comments: implemented with single-rate enforcement.
-- Payment refunds: implemented through the API, provider adapter, and webhooks.
-- Settlement reconciliation: implemented through `reconcile_payments` and the
-  Celery beat task.
-- Buyout completion/dispatch: buyouts create server-priced intents confirmed
-  through the payment webhook, with committed-trip protection and a
-  single-active-intent guard.
-- Monitoring, backup/restore, load smoke tests, and PostgreSQL concurrency
-  tests: implemented.
-
-### Remaining (tracked, non-blocking)
-
-- Push/email delivery channel for notifications (records + retries are in
-  place; the channel send is a future integration).
-- Paystack end-to-end verification against a staging account.
-- Postgres-backed restore drill and raw rollback validation on staging.
-- JWT token blacklist on logout (password-version invalidation covers the
-  critical path today).
+3. Move full-group dispatch to the backend (so a closed client cannot delay departure) and add buyout refunds.
+4. Align frontend and backend data contracts.
+5. Add pagination, rate limiting, audit logging, and idempotency.
+6. Validate PostgreSQL, Redis, Celery, HTTPS, secrets, monitoring, backups, and deployment rollback.
+7. Replace the frontend mock services with the real HTTP integration layer.

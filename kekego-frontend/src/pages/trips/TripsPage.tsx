@@ -16,7 +16,7 @@ export function TripsPage() {
   const { active, completed, cancelled, upcoming } = useMemo(() => {
     const root = state.trips
     return {
-      active: root.filter((t) => t.status === 'DRIVER_ASSIGNED' || t.status === 'DRIVER_ACCEPTED' || t.status === 'IN_PROGRESS'),
+      active: root.filter((t) => t.status === 'PENDING' || t.status === 'DRIVER_ASSIGNED' || t.status === 'DRIVER_ACCEPTED' || t.status === 'IN_PROGRESS'),
       completed: root
         .filter((t) => t.status === 'COMPLETED')
         .sort((a, b) => new Date(b.completedAt ?? b.requestedAt).getTime() - new Date(a.completedAt ?? a.requestedAt).getTime()),

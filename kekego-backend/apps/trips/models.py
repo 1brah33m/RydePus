@@ -29,22 +29,21 @@ class Trip(models.Model):
     )
     pickup_location = models.CharField(max_length=255)
     destination = models.CharField(max_length=255)
-    # Optional coordinates (WGS84). Ranges are enforced by the DB so a bad
-    # client payload can never persist out-of-range latitude/longitude.
     pickup_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     pickup_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     destination_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     destination_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     fare = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("-created_at",)
         constraints = [
-            # Fares are never negative. The API additionally requires > 0 (see
-            # the create serializer); this constraint is a safety net.
+            # Fares are never negative. The API additionally requires > 0.
             models.CheckConstraint(condition=models.Q(fare__gte=0), name="trip_fare_non_negative"),
             models.CheckConstraint(
                 condition=(models.Q(pickup_lat__isnull=True) | models.Q(pickup_lat__gte=-90, pickup_lat__lte=90)),
@@ -87,25 +86,26 @@ class Trip(models.Model):
         return f"Trip {self.id} - {self.status}"
 
 
-class TripRating(models.Model):
-    """A rating submitted by a participant after a trip is completed."""
+class Rating(models.Model):
+    """A student's rating of a completed trip's driver."""
 
     trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="ratings")
-    rater = models.ForeignKey(
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="trip_ratings",
     )
-    score = models.PositiveSmallIntegerField()
+    stars = models.PositiveSmallIntegerField()
     comment = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        unique_together = ("trip", "user")
         constraints = [
-            models.UniqueConstraint(fields=("trip", "rater"), name="unique_trip_rating_per_rater"),
-            models.CheckConstraint(condition=models.Q(score__gte=1, score__lte=5), name="trip_rating_score_1_to_5"),
+            models.CheckConstraint(condition=models.Q(stars__gte=1, stars__lte=5), name="rating_stars_1_to_5"),
         ]
         ordering = ("-created_at",)
 
     def __str__(self) -> str:
-        return f"Rating for trip {self.trip_id} by {self.rater_id}"
+        return f"Rating {self.stars}* for trip {self.trip_id}"

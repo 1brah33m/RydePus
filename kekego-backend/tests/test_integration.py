@@ -14,13 +14,13 @@ from apps.drivers.models import DriverProfile
 from apps.groups.models import Group
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
-from apps.trips.models import Trip, TripRating
+from apps.trips.models import Rating, Trip
 
 GROUPS_URL = "/api/v1/groups/"
 TRIPS_URL = "/api/v1/trips/"
 AVAILABLE_TRIPS_URL = f"{TRIPS_URL}available/"
 PAYMENTS_URL = "/api/v1/payments/"
-WEBHOOK_URL = f"{PAYMENTS_URL}webhook/"
+COLLECTABLE_URL = f"{PAYMENTS_URL}collectable/"
 
 
 def _client(user) -> APIClient:
@@ -55,10 +55,22 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     assert group_resp.status_code == status.HTTP_201_CREATED
     group_id = group_resp.json()["id"]
 
-    # 2. Student B joins.
+    # 2. Three more students join; a group only dispatches once all 4 seats are
+    # taken (members or buyout).
     join_resp = second_client.post(f"{GROUPS_URL}{group_id}/join/", format="json")
     assert join_resp.status_code == status.HTTP_200_OK
-    assert join_resp.json()["member_count"] == 2
+    for seat in (3, 4):
+        rider = User.objects.create_user(
+            email=f"rider{seat}@example.com",
+            password="StrongPass123!",
+            role=User.Role.STUDENT,
+        )
+        rider_client = _client(rider)
+        assert rider_client.post(f"{GROUPS_URL}{group_id}/join/", format="json").status_code == status.HTTP_200_OK
+
+    group = Group.objects.get(pk=group_id)
+    assert group.member_count == 4
+    assert group.is_dispatchable is True
 
     # 3. Student A publishes a trip for the group.
     trip_resp = student_client.post(
@@ -82,7 +94,8 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     )
     available = driver_client.get(AVAILABLE_TRIPS_URL)
     assert available.status_code == status.HTTP_200_OK
-    assert available.json()["count"] == 1
+    assert len(available.json()) == 1
+    assert available.json()[0]["id"] == trip_id
 
     accept = driver_client.post(f"{TRIPS_URL}{trip_id}/accept/", format="json")
     assert accept.status_code == status.HTTP_200_OK
@@ -103,49 +116,58 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     trip = Trip.objects.get(pk=trip_id)
     assert trip.status == Trip.Status.COMPLETED
 
-    # 6. Student pays; the provider webhook confirms the charge.
+    # 6. Student records a cash payment; it stays PENDING until the driver
+    #    confirms they received the money (no payment provider involved).
     pay_resp = student_client.post(
         PAYMENTS_URL,
-        {"trip": trip_id, "amount": 200, "currency": "NGN"},
+        {"trip": trip_id, "amount": 200, "currency": "NGN", "method": Payment.Method.CASH},
         format="json",
     )
     assert pay_resp.status_code == status.HTTP_201_CREATED
-    payment_ref = pay_resp.json()["provider_reference"]
-    assert payment_ref
+    payment_id = pay_resp.json()["id"]
+    assert Payment.objects.get(pk=payment_id).status == Payment.Status.PENDING
 
-    # Signed webhook confirmed against the manual provider in tests.
-    webhook = student_client.post(
-        WEBHOOK_URL,
-        {"event": "payment.success", "data": {"reference": payment_ref, "status": "success"}},
+    # The fare must be settled exactly; a short payment is rejected.
+    short_pay = student_client.post(
+        PAYMENTS_URL,
+        {"trip": trip_id, "amount": 100, "currency": "NGN", "method": Payment.Method.CASH},
         format="json",
     )
-    assert webhook.status_code == status.HTTP_200_OK
+    assert short_pay.status_code == status.HTTP_400_BAD_REQUEST
 
-    payment = Payment.objects.get(pk=pay_resp.json()["id"])
-    assert payment.status == Payment.Status.SUCCESSFUL
-    assert payment.provider_event == "payment.success"
+    # The assigned driver confirms receipt, which marks it collectable.
+    collectable = driver_client.get(COLLECTABLE_URL)
+    assert collectable.status_code == status.HTTP_200_OK
+    assert [row["id"] for row in collectable.json()] == [payment_id]
 
-    # 7. Student rates the completed ride once.
+    confirm = driver_client.post(f"{PAYMENTS_URL}{payment_id}/confirm/", format="json")
+    assert confirm.status_code == status.HTTP_200_OK, confirm.content
+    assert confirm.json()["status"] == "SUCCESSFUL"
+
+    # 7. A rider in the group rates the completed ride.
     rating = student_client.post(
-        f"{TRIPS_URL}{trip_id}/rating/",
-        {"score": 5, "comment": "Smooth ride"},
+        f"{TRIPS_URL}{trip_id}/rate/",
+        {"stars": 5, "comment": "Smooth ride"},
         format="json",
     )
-    assert rating.status_code == status.HTTP_201_CREATED
-    assert TripRating.objects.get(pk=rating.json()["id"]).score == 5
+    assert rating.status_code == status.HTTP_200_OK, rating.content
+    assert Rating.objects.get(pk=rating.json()["id"]).stars == 5
 
+    # Re-rating the same trip updates the existing rating instead of duplicating.
     duplicate_rating = student_client.post(
-        f"{TRIPS_URL}{trip_id}/rating/",
-        {"score": 4},
+        f"{TRIPS_URL}{trip_id}/rate/",
+        {"stars": 4},
         format="json",
     )
-    assert duplicate_rating.status_code == status.HTTP_409_CONFLICT
+    assert duplicate_rating.status_code == status.HTTP_200_OK
+    assert Rating.objects.filter(trip_id=trip_id, user=student_user).count() == 1
+    assert Rating.objects.get(trip_id=trip_id, user=student_user).stars == 4
 
-    # 8. Ledger surfaces in the paginated payments list.
+    # 8. Ledger surfaces in the payments list.
     payments_list = student_client.get(PAYMENTS_URL)
     assert payments_list.status_code == status.HTTP_200_OK
-    assert payments_list.json()["count"] == 1
-    assert payments_list.json()["results"][0]["status"] == "SUCCESSFUL"
+    assert len(payments_list.json()) == 1
+    assert payments_list.json()[0]["status"] == "SUCCESSFUL"
 
 
 @pytest.mark.integration
@@ -174,7 +196,7 @@ def test_driver_cancellation_returns_student_to_available_pool(driver_user, stud
     accept = driver_client.post(f"{TRIPS_URL}{trip.id}/accept/", format="json")
     assert accept.status_code == status.HTTP_200_OK
 
-    cancel = driver_client.post(f"{TRIPS_URL}{trip.id}/cancel/driver/", format="json")
+    cancel = driver_client.post(f"{TRIPS_URL}{trip.id}/cancel/", format="json")
     assert cancel.status_code == status.HTTP_200_OK
     assert cancel.json()["status"] == "CANCELLED"
 

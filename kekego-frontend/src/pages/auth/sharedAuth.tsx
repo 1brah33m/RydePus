@@ -1,26 +1,9 @@
-/** Shared helpers used by the student and driver registration flows. */
+/** Shared registration fields used by the student and driver sign-up flows. */
 
-/** Derive a display name from an email local part, e.g. quadri.adebayo -> Quadri Adebayo. */
-export function deriveName(email: string): string {
-  const local = email.split('@')[0] ?? ''
-  const cleaned = local
-    .replace(/\.([a-z])/g, (_m, c: string) => ' ' + c.toUpperCase())
-    .replace(/[_+.-]+/g, ' ')
-    .trim()
-  if (!cleaned) return ''
-  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-/** Uppercase initials of up to two leading words. */
-export function initials(fullName: string): string {
-  return fullName
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
-}
+import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
+import { DarkField } from '../../components/ui/DarkField'
+import { PASSWORD_HINT } from '../../config/password'
 
 /** Official four-color Google "G" mark. */
 export function GoogleIcon() {
@@ -46,27 +29,114 @@ export function GoogleIcon() {
   )
 }
 
-/** Stand-in accounts returned when no email was typed before "Continue with Google". */
-const MOCK_GOOGLE_ACCOUNTS: Array<{ fullName: string; email: string }> = [
-  { fullName: 'Alex Johnson', email: 'alex.johnson@gmail.com' },
-  { fullName: 'Sarah Chen', email: 'sarah.chen@gmail.com' },
-  { fullName: 'Michael Okafor', email: 'michael.okafor@gmail.com' },
-  { fullName: 'Priya Sharma', email: 'priya.sharma@gmail.com' },
-]
-
 /**
- * Simulate an OAuth round-trip that returns the linked Google identity.
- * If an email was already typed, treat it as the connected account (deriving
- * the name); otherwise a plausible mock Google account is returned.
+ * First name, last name, password and confirmation for both roles.
+ *
+ * When `locked` is true the names came from a verified Google token: they are
+ * shown read-only with a "use a different name" escape hatch, because the server
+ * always prefers the token's values and would silently discard typed edits.
  */
-export async function fetchGoogleAccount(
-  inputEmail?: string,
-): Promise<{ fullName: string; email: string }> {
-  await new Promise((resolve) => setTimeout(resolve, 800))
-  const typed = inputEmail?.trim() ?? ''
-  if (typed) {
-    return { fullName: deriveName(typed) || 'Google User', email: typed }
-  }
-  const account = MOCK_GOOGLE_ACCOUNTS[Math.floor(Math.random() * MOCK_GOOGLE_ACCOUNTS.length)]
-  return account
+export function NameAndPasswordFields({
+  firstName,
+  lastName,
+  password,
+  confirmation,
+  locked,
+  errors,
+  onFirstName,
+  onLastName,
+  onPassword,
+  onConfirmation,
+  onUnlockNames,
+}: {
+  firstName: string
+  lastName: string
+  password: string
+  confirmation: string
+  locked: boolean
+  errors: { firstName?: string; lastName?: string; password?: string; confirmation?: string }
+  onFirstName: (value: string) => void
+  onLastName: (value: string) => void
+  onPassword: (value: string) => void
+  onConfirmation: (value: string) => void
+  onUnlockNames: () => void
+}) {
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
+
+  return (
+    <>
+      {locked && (
+        <p className="-mb-1 rounded-xl border border-brand-400/30 bg-brand-400/10 px-3.5 py-2.5 text-[13px] leading-snug text-brand-300">
+          Name taken from your Google profile.{' '}
+          <button type="button" onClick={onUnlockNames} className="font-semibold underline hover:text-white">
+            Use a different name
+          </button>
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <DarkField
+          label="First name"
+          autoComplete="given-name"
+          placeholder="e.g. Aisha"
+          value={firstName}
+          onChange={(e) => onFirstName(e.target.value)}
+          error={errors.firstName}
+          readOnly={locked}
+          className={locked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
+        />
+        <DarkField
+          label="Last name"
+          autoComplete="family-name"
+          placeholder="e.g. Bello"
+          value={lastName}
+          onChange={(e) => onLastName(e.target.value)}
+          error={errors.lastName}
+          readOnly={locked}
+          className={locked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
+        />
+      </div>
+
+      <DarkField
+        label="Password"
+        type={showPassword ? 'text' : 'password'}
+        autoComplete="new-password"
+        placeholder="••••••••••"
+        value={password}
+        onChange={(e) => onPassword(e.target.value)}
+        error={errors.password}
+        hint={PASSWORD_HINT}
+        trailingIcon={
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            className="text-ink-400 transition hover:text-white"
+          >
+            {showPassword ? <EyeOff className="size-4.5" /> : <Eye className="size-4.5" />}
+          </button>
+        }
+      />
+      <DarkField
+        label="Confirm password"
+        type={showConfirmation ? 'text' : 'password'}
+        autoComplete="new-password"
+        placeholder="••••••••••"
+        value={confirmation}
+        onChange={(e) => onConfirmation(e.target.value)}
+        error={errors.confirmation}
+        trailingIcon={
+          <button
+            type="button"
+            onClick={() => setShowConfirmation((v) => !v)}
+            aria-label={showConfirmation ? 'Hide password' : 'Show password'}
+            className="text-ink-400 transition hover:text-white"
+          >
+            {showConfirmation ? <EyeOff className="size-4.5" /> : <Eye className="size-4.5" />}
+          </button>
+        }
+      />
+    </>
+  )
 }

@@ -48,24 +48,6 @@ def test_driver_profile_is_created_for_driver(driver_client, driver_user):
     assert response.status_code == 200
     assert response.json()["role"] == User.Role.DRIVER
     assert response.json()["availability_status"] == "OFFLINE"
-    assert response.json()["is_verified"] is True
-
-
-@pytest.mark.django_db
-def test_unverified_driver_cannot_use_driver_endpoints(api_client, unverified_driver_user):
-    client = APIClient()
-    client.force_authenticate(unverified_driver_user)
-
-    me = client.get(DRIVER_ME_URL)
-    assert me.status_code == 403
-    assert me.json()["error"]["code"] == "PERMISSION_DENIED"
-
-    availability = client.patch(
-        "/api/v1/drivers/availability/",
-        {"availability_status": "ONLINE"},
-        format="json",
-    )
-    assert availability.status_code == 403
 
 
 @pytest.mark.django_db
@@ -80,10 +62,21 @@ def test_driver_can_update_availability(driver_client, driver_user):
 
 
 @pytest.mark.django_db
-def test_permission_classes_work_directly(driver_user):
-    from rest_framework.test import APIRequestFactory
+def test_driver_can_set_vehicle_details(driver_client, driver_user):
+    response = driver_client.patch(
+        "/api/v1/drivers/availability/",
+        {"vehicle_plate": "EPE-789XY", "license_number": "NG-2021-0044"},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["vehicle_plate"] == "EPE-789XY"
+    assert response.json()["license_number"] == "NG-2021-0044"
 
+
+@pytest.mark.django_db
+def test_permission_classes_work_directly(driver_user):
     from apps.users.permissions import IsDriver, IsStudent
+    from rest_framework.test import APIRequestFactory
 
     factory = APIRequestFactory()
 

@@ -1,24 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  BadgeCheck,
-  Car,
-  HelpCircle,
-  LogOut,
-  Mail,
-  Moon,
-  Phone,
-  Star,
-  Truck,
-} from 'lucide-react'
+import { BadgeCheck, Car, HelpCircle, LogOut, Mail, Moon, Phone } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import { MOCK_DRIVERS } from '../../mock/data'
+import { useDriverRide } from '../../hooks/useDriverRide'
 import { DriverShell } from '../../components/navigation/DriverShell'
+import { PayoutDetailsCard } from '../../components/driver/PayoutDetailsCard'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
-
-const DRIVER = MOCK_DRIVERS[2]
 
 function nameInitials(fullName: string): string {
   return fullName
@@ -31,20 +20,26 @@ function nameInitials(fullName: string): string {
 }
 
 export function DriverProfile() {
-  const { student, logout } = useAuth()
+  const { logout } = useAuth()
   const navigate = useNavigate()
+  const { profile, history, savePayoutDetails } = useDriverRide()
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
-  if (!student) {
-    return null
-  }
+  const fullName = profile?.full_name ?? 'Driver'
+  const statusText =
+    profile?.availability_status === 'ONLINE'
+      ? 'Online'
+      : profile?.availability_status === 'BUSY'
+        ? 'On a ride'
+        : 'Offline'
 
   const rows = [
-    { icon: Truck, label: 'Plate Number', value: DRIVER.plateNumber },
-    { icon: Car, label: 'Keke ID', value: DRIVER.kekeIdentifier },
-    { icon: Mail, label: 'Email', value: student.email },
-    { icon: Phone, label: 'Phone', value: student.phone || DRIVER.phone },
+    { icon: Car, label: 'Vehicle', value: profile?.vehicle_type },
+    { icon: BadgeCheck, label: 'Plate Number', value: profile?.vehicle_plate },
+    { icon: BadgeCheck, label: 'License Number', value: profile?.license_number },
+    { icon: Mail, label: 'Email', value: profile?.email },
+    { icon: Phone, label: 'Phone', value: profile?.phone_number },
   ]
 
   const actions = [
@@ -61,12 +56,12 @@ export function DriverProfile() {
             aria-hidden
             className="flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-700 dark:bg-brand-500/15 dark:text-brand-400"
           >
-            {nameInitials(student.fullName) || 'K'}
+            {nameInitials(fullName) || 'D'}
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="break-words text-lg font-bold leading-snug dark:text-slate-100">{student.fullName}</h1>
+            <h1 className="break-words text-lg font-bold leading-snug dark:text-slate-100">{fullName}</h1>
             <p className="mt-0.5 break-words text-sm leading-relaxed text-ink-500 dark:text-slate-400">
-              {DRIVER.plateNumber} · {DRIVER.kekeIdentifier}
+              {profile?.vehicle_plate || 'No plate set'} · {profile?.vehicle_type || 'Keke'}
             </p>
           </div>
         </header>
@@ -75,17 +70,17 @@ export function DriverProfile() {
         <section aria-label="Driver statistics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
-              <Star aria-hidden className="size-3.5 text-brand-600 dark:text-brand-400" />
-              Rating
+              <span aria-hidden className={`size-2 rounded-full ${statusText === 'Offline' ? 'bg-ink-300 dark:bg-slate-600' : 'animate-pulse bg-brand-500'}`} />
+              Status
             </span>
-            <p className="mt-1.5 text-2xl font-bold">{DRIVER.rating.toFixed(1)}</p>
+            <p className="mt-1.5 text-xl font-bold">{statusText}</p>
           </div>
           <div className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
               <Car aria-hidden className="size-3.5 text-brand-600 dark:text-brand-400" />
               Total trips
             </span>
-            <p className="mt-1.5 text-2xl font-bold">{DRIVER.totalTrips}</p>
+            <p className="mt-1.5 text-2xl font-bold">{history.length}</p>
           </div>
         </section>
 
@@ -113,6 +108,19 @@ export function DriverProfile() {
               </div>
             ))}
           </dl>
+        </section>
+
+        {/* Payout account */}
+        <section aria-label="Payout account">
+          <PayoutDetailsCard
+            initial={{
+              bank_name: profile?.bank_name,
+              account_number: profile?.account_number,
+              account_name: profile?.account_name,
+            }}
+            hasPayoutDetails={profile?.has_payout_details ?? false}
+            onSave={savePayoutDetails}
+          />
         </section>
 
         {/* Actions */}

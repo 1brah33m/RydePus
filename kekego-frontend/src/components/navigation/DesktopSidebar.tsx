@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
-import { CarFront, UserCircle } from 'lucide-react'
+import { UserCircle } from 'lucide-react'
 import { ThemeToggle } from '../ui/ThemeToggle'
+import { RMark } from '../ui/Logo'
 import { cn } from '../../utils/cn'
 
 export interface SidebarItem {
@@ -39,11 +40,17 @@ export function DesktopSidebar({ brand, items, profileTo, profileLabel, footer }
       <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-ink-200/70 px-6 dark:border-slate-800">
         <span
           aria-hidden
-          className="flex size-8 items-center justify-center rounded-xl bg-brand-500/15 text-brand-600 dark:text-brand-400"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 dark:bg-brand-500/25"
         >
-          <CarFront className="size-5" strokeWidth={2.2} />
+          <RMark className="text-lg" />
         </span>
-        <span className="text-lg font-extrabold tracking-tight text-ink-900 dark:text-white">{brand}</span>
+        <span
+          aria-label={brand}
+          className="flex flex-col text-lg font-extrabold leading-[1.1] tracking-tight text-ink-900 dark:text-white"
+        >
+          <span>Ryde</span>
+          <span className="text-brand-500 dark:text-brand-400">pus</span>
+        </span>
       </div>
 
       <nav aria-label="Primary navigation" className="flex-1 space-y-1 overflow-y-auto p-4">

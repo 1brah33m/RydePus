@@ -1,7 +1,6 @@
 import { Users } from 'lucide-react'
 import type { Group } from '../../types'
 import { timeAgo } from '../../utils/format'
-import { groupSeatCount } from '../../services/mockBackend'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -14,9 +13,9 @@ interface GroupCardProps {
 }
 
 export function GroupCard({ group, onJoin, joining = false }: GroupCardProps) {
-  const occupied = groupSeatCount(group)
+  const occupied = group.seatsFilled
   const waiting = group.maxSize - occupied
-  const joinable = group.status === 'WAITING'
+  const joinable = group.status === 'WAITING' && waiting > 0
 
   return (
     <Card className="p-4">
@@ -37,10 +36,12 @@ export function GroupCard({ group, onJoin, joining = false }: GroupCardProps) {
       </div>
 
       <p className="mt-1 text-sm text-ink-500 dark:text-slate-400">
-        {joinable
+        {group.status === 'WAITING'
           ? `Waiting for ${waiting} more passenger${waiting === 1 ? '' : 's'}`
           : group.status === 'FULL'
-            ? 'Group is full — ready for a driver'
+            ? group.boughtSeats > 0
+              ? 'Full — seats paid for, finding a driver'
+              : 'Group is full — ready for a driver'
             : 'Group sent to driver queue'}
       </p>
 

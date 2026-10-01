@@ -1,19 +1,29 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Sum
+from django.utils import timezone
+
+
+#: Every keke seats exactly four passengers; a group is a 4-slot ride request.
+MAX_GROUP_CAPACITY = 4
 
 
 class Group(models.Model):
     """A student-led ride group for a route or destination."""
 
+    class Status(models.TextChoices):
+        WAITING = "WAITING", "Waiting"
+        FULL = "FULL", "Full"
+
     name = models.CharField(max_length=150)
     pickup_location = models.CharField(max_length=255)
     destination = models.CharField(max_length=255)
-    # Optional coordinates (WGS84) with DB-enforced ranges, matching Trip.
     pickup_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     pickup_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     destination_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     destination_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    capacity = models.PositiveIntegerField(default=1)
+    capacity = models.PositiveIntegerField(default=MAX_GROUP_CAPACITY)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.WAITING)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -25,7 +35,8 @@ class Group(models.Model):
     class Meta:
         ordering = ("-created_at",)
         constraints = [
-            # Capacity must always be at least 1; the API caps it at 12.
+            # Capacity is always the fixed four keke seats, but keep it guarded
+            # so a bad API call cannot create an unroutable group.
             models.CheckConstraint(condition=models.Q(capacity__gte=1), name="group_capacity_min"),
             models.CheckConstraint(condition=models.Q(capacity__lte=12), name="group_capacity_max"),
             models.CheckConstraint(
@@ -59,14 +70,48 @@ class Group(models.Model):
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new:
-            GroupMember.objects.get_or_create(group=self, user=self.created_by, seat=1)
+            GroupMember.objects.get_or_create(group=self, user=self.created_by)
+
+    def refresh_status(self):
+        """Recalculate FULL/WAITING from the current membership and buyout seats."""
+        self.status = self.Status.FULL if self.is_dispatchable else self.Status.WAITING
+        Group.objects.filter(pk=self.pk).update(status=self.status, updated_at=timezone.now())
 
     @property
     def member_count(self):
         return self.members.count()
 
-    def __str__(self) -> str:
-        return self.name
+    @property
+    def bought_seats(self):
+        """Seats covered by an active group buyout (remaining seats paid for).
+
+        Imported lazily to avoid a circular import (payments -> trips -> groups).
+        """
+        from apps.payments.models import Payment
+
+        total = self.payments.filter(
+            kind=Payment.Kind.GROUP_BUYOUT,
+            status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+        ).aggregate(total=Sum("seats"))["total"]
+        return total or 0
+
+    @property
+    def seats_filled(self):
+        """Occupied slots: joined members plus any bought-out seats (capped at capacity)."""
+        return min(self.capacity, self.member_count + self.bought_seats)
+
+    @property
+    def is_dispatchable(self):
+        """True when the group may be sent to the driver queue (4/4 or bought out)."""
+        return self.member_count + self.bought_seats >= self.capacity
+
+    @property
+    def joinable(self):
+        """True while a real member can still take a free seat."""
+        return self.seats_filled < self.capacity
+
+    def __str__(self):
+        return f"{self.name} ({self.seats_filled}/{self.capacity})"
 
 
 class GroupMember(models.Model):
@@ -101,13 +146,4 @@ class GroupMember(models.Model):
         ordering = ("joined_at",)
 
     def __str__(self) -> str:
-        return f"{self.user.email} -> {self.group.name} (seat {self.seat})"
-
-    @staticmethod
-    def next_free_seat(group, capacity: int) -> int | None:
-        """Smallest unused 1-based slot for ``group`` within ``capacity``."""
-        taken = set(GroupMember.objects.filter(group=group, seat__isnull=False).values_list("seat", flat=True))
-        for candidate in range(1, capacity + 1):
-            if candidate not in taken:
-                return candidate
-        return None
+        return f"{self.user.email} -> {self.group.name}"

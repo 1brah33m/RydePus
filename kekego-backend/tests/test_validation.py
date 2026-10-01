@@ -10,7 +10,7 @@ from rest_framework import status
 
 from apps.groups.models import Group, GroupMember
 from apps.payments.models import Payment, Refund
-from apps.trips.models import Trip, TripRating
+from apps.trips.models import Rating, Trip
 
 GROUPS_URL = "/api/v1/groups/"
 TRIPS_URL = "/api/v1/trips/"
@@ -265,12 +265,12 @@ def test_trip_cannot_skip_transition_states(student_user):
 
 
 @pytest.mark.django_db
-def test_trip_rating_score_bounds_enforced(student_user):
+def test_trip_rating_stars_bounds_enforced(student_user):
     group = _group(student_user)
     trip = _trip(student_user, group, status=Trip.Status.COMPLETED)
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            TripRating.objects.create(trip=trip, rater=student_user, score=9)
+            Rating.objects.create(trip=trip, user=student_user, stars=9)
 
 
 # --------------------------------------------------------------------------

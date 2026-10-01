@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Users, X, Search, Zap, LogOut, Lock } from 'lucide-react'
+import { Users, X, Search, LogOut, Lock, CreditCard } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { groupSeatCount } from '../../services/mockBackend'
-import { FARE_PER_SEAT } from '../../mock/data'
-import { formatCurrency } from '../../utils/format'
-import { cn } from '../../utils/cn'
 import { isGroupCancellationLocked } from '../../utils/rideStatus'
+import { perSeatFare } from '../../config/pricing'
+import { formatCurrency } from '../../utils/format'
 import { AppHeader } from '../../components/navigation/AppHeader'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -19,7 +17,7 @@ import { PassengerSlots } from '../../components/groups/PassengerSlots'
 export function GroupStatus() {
   const { groupId } = useParams<{ groupId: string }>()
   const navigate = useNavigate()
-  const { state, activeGroup, cancelGroup, leaveGroup, buyOutRemainingSeats } = useApp()
+  const { state, activeGroup, cancelGroup, leaveGroup, buyOutGroup } = useApp()
 
   const group =
     state.groups.find((g) => g.id === groupId) ?? state.groups.find((g) => g.code === groupId)
@@ -27,9 +25,10 @@ export function GroupStatus() {
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [leaveBlocked, setLeaveBlocked] = useState(false)
-  const [buyingOut, setBuyingOut] = useState(false)
-  const [buyoutError, setBuyoutError] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [buyOutOpen, setBuyOutOpen] = useState(false)
+  const [buying, setBuying] = useState(false)
+  const [buyError, setBuyError] = useState<string | null>(null)
 
   // Once a driver is matched, the group hands over to the trip screen.
   useEffect(() => {
@@ -63,10 +62,12 @@ export function GroupStatus() {
   }
 
   const isActive = activeGroup?.id === group.id
-  const occupied = groupSeatCount(group)
+  const occupied = group.seatsFilled
   const waiting = group.maxSize - occupied
   const searching = group.status === 'FULL' || group.status === 'SEARCHING_DRIVER'
   const matched = isGroupCancellationLocked(group.status)
+  const perSeat = perSeatFare(group.pickup.id, group.destination.id)
+  const buyOutTotal = perSeat * waiting
 
   const handleCancel = async () => {
     setBusy(true)
@@ -80,6 +81,20 @@ export function GroupStatus() {
     }
   }
 
+  /** Cover every empty seat so the group can be dispatched immediately. */
+  const handleBuyOut = async () => {
+    setBuying(true)
+    setBuyError(null)
+    try {
+      await buyOutGroup(group.id)
+      setBuyOutOpen(false)
+    } catch (err) {
+      setBuyError(err instanceof Error ? err.message : 'We could not take that payment. Please try again.')
+    } finally {
+      setBuying(false)
+    }
+  }
+
   /** Leave the group, freeing the seat(s) for others and clearing the active selection. */
   const handleLeave = async () => {
     setLeaving(true)
@@ -90,20 +105,6 @@ export function GroupStatus() {
     } catch {
       setLeaving(false)
       setLeaveBlocked(true)
-    }
-  }
-
-  /** Pay for every remaining seat: fills the group and dispatches it as fully funded. */
-  const handleBuyout = async () => {
-    setBuyingOut(true)
-    setBuyoutError(null)
-    try {
-      await buyOutRemainingSeats(group.id, 'card')
-      setBuyingOut(false)
-      setBuyoutError(null)
-    } catch (err) {
-      setBuyingOut(false)
-      setBuyoutError(err instanceof Error ? err.message : 'Could not complete the buyout. Please try again.')
     }
   }
 
@@ -133,7 +134,6 @@ export function GroupStatus() {
           <SearchingForDriver
             groupOccupied={occupied}
             groupMax={group.maxSize}
-            fullyFunded={group.fullyFunded ?? false}
             leaving={leaving}
             onLeave={handleLeave}
           />
@@ -150,20 +150,41 @@ export function GroupStatus() {
             </div>
 
             <div className="mt-3">
-              <PassengerSlots members={group.members} waitingLabel="Waiting…" />
+              <PassengerSlots
+                members={group.members}
+                boughtSeats={group.boughtSeats}
+                waitingLabel="Empty seat"
+              />
             </div>
 
             <p className="mt-4 rounded-xl bg-ink-50 dark:bg-white/5 px-3.5 py-2.5 text-sm leading-relaxed text-ink-600 dark:text-slate-400">
-              Waiting for <strong className="text-ink-800 dark:text-slate-200">{waiting} more passenger{waiting === 1 ? '' : 's'}</strong>.
-              Your group will be sent to a driver when all {group.maxSize} seats are filled.
+              {waiting > 0 ? (
+                <>
+                  Your group needs <strong className="text-ink-800 dark:text-slate-200">{waiting} more passenger{waiting === 1 ? '' : 's'}</strong> before a
+                  driver is matched.
+                </>
+              ) : (
+                <>
+                  All <strong className="text-ink-800 dark:text-slate-200">{group.maxSize} seats</strong> are taken
+                  {group.boughtSeats > 0 && ' (including the seats you paid for)'}.
+                </>
+              )}
             </p>
 
-            <BuyoutCard
-              waiting={waiting}
-              busy={buyingOut}
-              error={buyoutError}
-              onBuyout={handleBuyout}
-            />
+            {waiting > 0 && (
+              <Button
+                size="lg"
+                fullWidth
+                className="mt-3"
+                onClick={() => {
+                  setBuyError(null)
+                  setBuyOutOpen(true)
+                }}
+              >
+                <CreditCard aria-hidden className="size-4" />
+                Fill {waiting} seat{waiting === 1 ? '' : 's'} — {formatCurrency(buyOutTotal)}
+              </Button>
+            )}
 
             <div className="mt-5 flex flex-col gap-2.5">
               <Button size="lg" fullWidth variant="outline" disabled={busy}>
@@ -187,6 +208,37 @@ export function GroupStatus() {
         )}
       </div>
 
+      <Modal open={buyOutOpen} onClose={() => setBuyOutOpen(false)} title="Fill the empty seats">
+        <p className="text-sm leading-relaxed text-ink-600 dark:text-slate-300">
+          You&apos;re paying for the {waiting} empty seat{waiting === 1 ? '' : 's'} so everyone in this group can
+          leave right away.
+        </p>
+        <dl className="mt-4 space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <dt className="text-ink-500 dark:text-slate-400">Empty seats</dt>
+            <dd className="font-semibold text-ink-800 dark:text-slate-200">{waiting}</dd>
+          </div>
+          <div className="flex items-center justify-between">
+            <dt className="text-ink-500 dark:text-slate-400">Fare per seat</dt>
+            <dd className="font-semibold text-ink-800 dark:text-slate-200">{formatCurrency(perSeat)}</dd>
+          </div>
+          <div className="flex items-center justify-between border-t border-ink-100 pt-2 dark:border-white/10">
+            <dt className="font-semibold text-ink-800 dark:text-slate-200">Total</dt>
+            <dd className="text-lg font-bold text-brand-700 dark:text-brand-300">{formatCurrency(buyOutTotal)}</dd>
+          </div>
+        </dl>
+        {buyError && <Alert tone="error" className="mt-4">{buyError}</Alert>}
+        <div className="mt-5 flex flex-col gap-2.5">
+          <Button size="lg" fullWidth loading={buying} onClick={handleBuyOut}>
+            <CreditCard aria-hidden className="size-4" />
+            Pay {formatCurrency(buyOutTotal)} and go now
+          </Button>
+          <Button size="lg" fullWidth variant="outline" onClick={() => setBuyOutOpen(false)}>
+            Not now
+          </Button>
+        </div>
+      </Modal>
+
       <Modal open={leaveBlocked} onClose={() => setLeaveBlocked(false)} title="Can't leave this trip">
         <div className="flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
@@ -209,22 +261,18 @@ export function GroupStatus() {
 function SearchingForDriver({
   groupOccupied,
   groupMax,
-  fullyFunded,
   leaving,
   onLeave,
 }: {
   groupOccupied: number
   groupMax: number
-  fullyFunded: boolean
   leaving: boolean
   onLeave: () => void
 }) {
   return (
     <Card className="overflow-hidden p-0">
       <div className="bg-brand-600 px-5 pb-6 pt-5 text-white">
-        <h2 className="text-xl font-bold tracking-tight">
-          {fullyFunded ? 'Instant departure secured!' : 'Your group is full!'}
-        </h2>
+        <h2 className="text-xl font-bold tracking-tight">Your group is searching!</h2>
         <div className="mt-1 flex items-center gap-2 text-brand-100">
           <Users aria-hidden className="size-4" />
           {groupOccupied}/{groupMax} passengers
@@ -252,27 +300,10 @@ function SearchingForDriver({
 
       <div className="px-5 py-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">Status</p>
-        <p
-          className={cn(
-            'mt-1 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold',
-            fullyFunded
-              ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30'
-              : 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30',
-          )}
-        >
-          <span
-            className={cn(
-              'size-1.5 animate-pulse rounded-full',
-              fullyFunded ? 'bg-brand-500' : 'bg-brand-500',
-            )}
-          />
-          {fullyFunded ? 'INSTANT DEPARTURE · FULLY FUNDED' : 'SEARCHING FOR DRIVER'}
+        <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-sm font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30">
+          <span className="size-1.5 animate-pulse rounded-full bg-brand-500" />
+          SEARCHING FOR DRIVER
         </p>
-        {fullyFunded && (
-          <p className="mt-3 rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm leading-relaxed text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
-            A driver has been notified of this fully-funded ride for instant pickup.
-          </p>
-        )}
 
         <button
           type="button"
@@ -309,57 +340,5 @@ function CancellationLockedNotice({ tripId }: { tripId?: string }) {
         </Button>
       )}
     </Card>
-  )
-}
-
-function BuyoutCard({
-  waiting,
-  busy,
-  error,
-  onBuyout,
-}: {
-  waiting: number
-  busy: boolean
-  error: string | null
-  onBuyout: () => void
-}) {
-  if (waiting <= 0) return null
-
-  const total = waiting * FARE_PER_SEAT
-
-  return (
-    <div className="mt-3 overflow-hidden rounded-2xl border border-brand-300/70 bg-gradient-to-br from-brand-50 to-brand-100 p-4 dark:border-brand-500/30 dark:from-brand-500/15 dark:to-brand-500/10">
-      <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white">
-          <Zap aria-hidden className="size-4.5" />
-        </span>
-        <div className="min-w-0">
-          <h3 className="text-sm font-bold text-brand-900 dark:text-brand-200">
-            Skip the wait and depart now!
-          </h3>
-          <p className="mt-1 text-sm leading-relaxed text-brand-800/80 dark:text-brand-200/80">
-            {waiting} empty seat{waiting === 1 ? '' : 's'} × {formatCurrency(FARE_PER_SEAT)} ={' '}
-            <strong className="text-brand-900 dark:text-brand-100">{formatCurrency(total)}</strong>.
-            Pay for the remaining {waiting} seat{waiting === 1 ? '' : 's'} ({formatCurrency(total)}) so your Keke
-            leaves immediately.
-          </p>
-        </div>
-      </div>
-
-      <Button
-        size="lg"
-        fullWidth
-        variant="primary"
-        loading={busy}
-        onClick={onBuyout}
-        disabled={busy}
-        className="mt-3.5 bg-brand-500 hover:bg-brand-600 dark:bg-brand-500 dark:hover:bg-brand-400"
-      >
-        <Zap aria-hidden className="size-4" />
-        {busy ? 'Filling remaining seats…' : 'Pay for Remaining Seats & Depart Now'}
-      </Button>
-
-      {error && <Alert tone="error" className="mt-3">{error}</Alert>}
-    </div>
   )
 }

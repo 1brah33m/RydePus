@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   BellRing,
   CheckCircle2,
   ChevronRight,
   Clock3,
-  Flame,
   Map,
   Navigation,
   Power,
@@ -14,40 +13,46 @@ import {
   Wallet,
   Zap,
 } from 'lucide-react'
-import { FARE_PER_SEAT, MAX_GROUP_SIZE, MOCK_DRIVERS, CAMPUS_LOCATIONS } from '../../mock/data'
 import { formatCurrency } from '../../utils/format'
 import { cn } from '../../utils/cn'
-import * as backend from '../../services/mockBackend'
-import type { DriverDispatch } from '../../types'
+import type { Trip } from '../../types'
 import { DriverShell } from '../../components/navigation/DriverShell'
 import { OnlineToggle } from '../../components/driver/OnlineToggle'
-
-const DRIVER = MOCK_DRIVERS[2]
-const REQUEST_PICKUP = CAMPUS_LOCATIONS.find((l) => l.id === 'library') ?? CAMPUS_LOCATIONS[0]
-const REQUEST_DESTINATION = CAMPUS_LOCATIONS.find((l) => l.id === 'hostelFemale') ?? CAMPUS_LOCATIONS[0]
+import { PaymentsToConfirmCard } from '../../components/driver/PaymentsToConfirmCard'
+import { useDriverRide } from '../../hooks/useDriverRide'
 
 export function DriverHome() {
   const navigate = useNavigate()
-  const [online, setOnline] = useState(true)
-  const [accepted, setAccepted] = useState(false)
-  const [dispatches, setDispatches] = useState<DriverDispatch[]>([])
+  const {
+    profile,
+    online,
+    requests,
+    activeTrip,
+    busy,
+    completedTotal,
+    history,
+    pendingPayments,
+    setOnline,
+    accept,
+    start,
+    complete,
+    confirmPayment,
+    rejectPayment,
+  } = useDriverRide()
 
-  // Fully-funded buyouts arrive as high-priority dispatches.
-  useEffect(() => {
-    const loadActive = () => {
-      const next = backend.getDispatches().filter((d) => !d.acknowledged)
-      setDispatches((prev) =>
-        prev.length === next.length && prev.every((p, i) => p.id === next[i]?.id) ? prev : next,
-      )
+  const [toggling, setToggling] = useState(false)
+
+  const handleToggle = async () => {
+    setToggling(true)
+    try {
+      await setOnline(!online)
+    } finally {
+      setToggling(false)
     }
-    loadActive()
-    const unsubscribe = backend.subscribeDispatches(loadActive)
-    const timer = setInterval(loadActive, 5000)
-    return () => {
-      unsubscribe()
-      clearInterval(timer)
-    }
-  }, [])
+  }
+
+  const firstName = profile?.full_name?.split(' ')[0] ?? 'Driver'
+  const nextRequest = requests[0]
 
   return (
     <DriverShell>
@@ -57,18 +62,18 @@ export function DriverHome() {
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-slate-400">Rydepus Driver</p>
             <h1 className="mt-0.5 truncate text-xl font-bold tracking-tight">
-              Welcome back, {DRIVER.name.split(' ')[0]}
+              Welcome back, {firstName}
             </h1>
             <p className="mt-1 truncate text-sm text-ink-500 dark:text-slate-400">Ready to earn today?</p>
           </div>
-          <OnlineToggle online={online} onToggle={() => setOnline((o) => !o)} />
+          <OnlineToggle online={online} onToggle={() => void handleToggle()} />
         </header>
 
         {/* Earnings & status */}
         <section aria-label="Today's earnings">
           <div className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E] dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">Today's earnings</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">Earnings</p>
               {online && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-brand-700 dark:bg-brand-500/15 dark:text-brand-400">
                   <span className="size-1.5 animate-pulse rounded-full bg-brand-500 dark:bg-brand-400" />
@@ -79,11 +84,18 @@ export function DriverHome() {
 
             <div className="mt-2.5 flex items-end justify-between gap-3">
               <p className="text-3xl font-bold tracking-tight">
-                {formatCurrency(14500)}
-                <span className="ml-1.5 text-xs font-medium text-ink-500 dark:text-slate-400">today</span>
+                {formatCurrency(completedTotal)}
+                <span className="ml-1.5 text-xs font-medium text-ink-500 dark:text-slate-400">completed</span>
               </p>
-              <span className="rounded-lg bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">
-                +12% vs last week
+              <span
+                className={cn(
+                  'rounded-lg px-2 py-1 text-xs font-semibold',
+                  online
+                    ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400'
+                    : 'bg-ink-100 text-ink-500 dark:bg-white/5 dark:text-slate-400',
+                )}
+              >
+                {online ? 'Accepting rides' : 'Offline'}
               </span>
             </div>
 
@@ -92,52 +104,54 @@ export function DriverHome() {
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Trips</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-lg font-bold">
                   <CheckCircle2 aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
-                  8 Trips
+                  {history.length} done
                 </dd>
               </div>
               <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Online</dt>
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Queue</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-lg font-bold">
                   <Clock3 aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
-                  3.5h
+                  {requests.length} new
                 </dd>
               </div>
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Rating</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-lg font-bold">
                   <Zap aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
-                  {DRIVER.rating.toFixed(1)}
+                  —
                 </dd>
               </div>
             </dl>
           </div>
         </section>
 
-        {/* Fully-funded buyout dispatch notification */}
-        {dispatches.length > 0 && (
-          <UrgentDispatchBanner
-            count={dispatches.length}
-            dispatch={dispatches[0]}
-            onOpenQueue={() => navigate('/driver/requests')}
-          />
-        )}
-
-        {/* Incoming active request / offline placeholder */}
+        {/* Incoming request / active ride / offline placeholder */}
         {online ? (
-          accepted ? (
-            <AcceptedCard pickup={REQUEST_PICKUP.name} destination={REQUEST_DESTINATION.name} />
-          ) : (
+          activeTrip ? (
+            <ActiveRideCard
+              trip={activeTrip}
+              busy={busy}
+              onStart={() => void start(activeTrip.id)}
+              onComplete={() => void complete(activeTrip.id)}
+            />
+          ) : nextRequest ? (
             <RideRequestCard
-              pickup={REQUEST_PICKUP.name}
-              destination={REQUEST_DESTINATION.name}
-              farePerSeat={FARE_PER_SEAT}
-              onAccept={() => setAccepted(true)}
+              trip={nextRequest}
+              onAccept={() => void accept(nextRequest.id)}
               onViewRequests={() => navigate('/driver/requests')}
             />
+          ) : (
+            <WaitingCard onOpenQueue={() => navigate('/driver/requests')} />
           )
         ) : (
-          <OfflineCard onGoOnline={() => setOnline(true)} />
+          <OfflineCard onGoOnline={() => void handleToggle()} disabled={toggling} />
         )}
+
+        <PaymentsToConfirmCard
+          payments={pendingPayments}
+          onConfirm={confirmPayment}
+          onReject={rejectPayment}
+        />
 
         {/* Quick actions */}
         <section aria-label="Quick actions">
@@ -146,18 +160,18 @@ export function DriverHome() {
             <QuickActionCard
               icon={Truck}
               title="Vehicle & Permit"
-              subtitle={`${DRIVER.plateNumber} · ${DRIVER.kekeIdentifier}`}
+              subtitle={`${profile?.vehicle_plate ?? 'No plate set'} · ${profile?.vehicle_type ?? 'Keke'}`}
               meta="Permit Verified"
               metaClassName="bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400"
             />
-<QuickActionCard
-                icon={Wallet}
-                title="Earnings Payout"
-                subtitle="Payout history"
-                meta="₦38,200 ready"
-                metaClassName="bg-ink-100 text-ink-800 dark:bg-white/5 dark:text-slate-200"
-                onClick={() => navigate('/driver/earnings')}
-              />
+            <QuickActionCard
+              icon={Wallet}
+              title="Earnings Payout"
+              subtitle="Payout history"
+              meta={`${formatCurrency(completedTotal)} ready`}
+              metaClassName="bg-ink-100 text-ink-800 dark:bg-white/5 dark:text-slate-200"
+              onClick={() => navigate('/driver/earnings')}
+            />
             <QuickActionCard
               icon={Map}
               title="Campus Zone Hotspots"
@@ -173,66 +187,12 @@ export function DriverHome() {
   )
 }
 
-function UrgentDispatchBanner({
-  count,
-  dispatch,
-  onOpenQueue,
-}: {
-  count: number
-  dispatch: DriverDispatch
-  onOpenQueue: () => void
-}) {
-  return (
-    <section
-      aria-label="Urgent fully-funded ride"
-      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-5 text-white shadow-[0_12px_40px_rgba(30,58,138,0.4)]"
-    >
-      <span aria-hidden className="absolute -right-10 -top-10 size-40 rounded-full bg-white/15 blur-2xl" />
-
-      <div className="relative flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="flex size-9 items-center justify-center rounded-full bg-white/20">
-            <Flame aria-hidden className="size-5" />
-          </span>
-          <div>
-            <p className="text-sm font-bold leading-tight">Fully-funded ride ready</p>
-            <p className="text-xs text-brand-100">
-              {count === 1 ? '1 priority dispatch' : `${count} priority dispatches`} · depart now
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onOpenQueue}
-          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-bold text-brand-700 transition-transform active:scale-[0.98]"
-        >
-          Open queue
-          <ChevronRight aria-hidden className="size-4" />
-        </button>
-      </div>
-
-      <p className="relative mt-3 text-lg font-bold leading-snug">
-        Group {dispatch.groupCode} — {dispatch.pickup.name}
-        <span className="mx-1.5" aria-hidden>→</span>
-        {dispatch.destination.name}
-      </p>
-      <p className="relative mt-1 text-sm text-brand-100">
-        {dispatch.seats}/{MAX_GROUP_SIZE} seats · {formatCurrency(dispatch.fare)} fare, paid &amp; ready
-      </p>
-    </section>
-  )
-}
-
 function RideRequestCard({
-  pickup,
-  destination,
-  farePerSeat,
+  trip,
   onAccept,
   onViewRequests,
 }: {
-  pickup: string
-  destination: string
-  farePerSeat: number
+  trip: Trip
   onAccept: () => void
   onViewRequests: () => void
 }) {
@@ -252,29 +212,28 @@ function RideRequestCard({
       </div>
 
       <p className="relative mt-3 text-xl font-bold leading-snug">
-        {pickup}
+        {trip.pickup.name}
         <span className="mx-1.5" aria-hidden>→</span>
-        {destination}
+        {trip.destination.name}
       </p>
 
       <div className="relative mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-medium">
         <span className="inline-flex items-center gap-1">
           <Users aria-hidden className="size-4" />
-          {MAX_GROUP_SIZE} passengers
+          {trip.passengerCount ?? 1} passenger{trip.passengerCount && trip.passengerCount > 1 ? 's' : ''}
         </span>
         <span aria-hidden className="text-white/60">•</span>
         <span className="inline-flex items-center gap-1">
           <Navigation aria-hidden className="size-4" />
-          2.4 km away
+          {formatCurrency(trip.fare)}/seat
         </span>
       </div>
 
       <div className="relative mt-4 flex items-center justify-between gap-3">
         <div className="rounded-2xl bg-white/20 px-3.5 py-2.5 backdrop-blur-sm">
-          <p className="text-[10px] font-bold uppercase tracking-wider">Fare</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider">Total fare</p>
           <p className="text-base font-bold">
-            {formatCurrency(farePerSeat)}
-            <span className="text-xs font-semibold">/seat</span>
+            {formatCurrency(trip.fare * (trip.passengerCount ?? 1))}
           </p>
         </div>
         <div className="flex flex-1 gap-2">
@@ -300,33 +259,98 @@ function RideRequestCard({
   )
 }
 
-function AcceptedCard({ pickup, destination }: { pickup: string; destination: string }) {
+function ActiveRideCard({
+  trip,
+  busy,
+  onStart,
+  onComplete,
+}: {
+  trip: Trip
+  busy: boolean
+  onStart: () => void
+  onComplete: () => void
+}) {
+  const waitingToStart = trip.status === 'DRIVER_ACCEPTED'
   return (
     <section
-      aria-label="Ride accepted"
+      aria-label={waitingToStart ? 'Assigned ride' : 'Ride in progress'}
       className="rounded-3xl border border-brand-200 bg-white p-5 shadow-sm dark:border-brand-500/30 dark:bg-[#1E1E1E]"
     >
       <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400">
         <BellRing aria-hidden className="size-4" />
-        <p className="text-xs font-bold uppercase tracking-widest">Ride accepted</p>
+        <p className="text-xs font-bold uppercase tracking-widest">
+          {waitingToStart ? 'Ride assigned — waiting to start' : 'Ride in progress'}
+        </p>
       </div>
       <p className="mt-3 text-lg font-bold leading-snug">
-        {pickup}
+        {trip.pickup.name}
         <span className="mx-1.5" aria-hidden>→</span>
-        {destination}
+        {trip.destination.name}
       </p>
-      <div className="mt-4 flex items-center justify-between rounded-2xl bg-ink-50 px-4 py-3 dark:bg-white/5">
-        <span className="text-sm text-ink-600 dark:text-slate-300">Student is waiting at pickup</span>
-        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 dark:text-brand-400">
+      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-ink-50 px-4 py-3 text-sm text-ink-600 dark:bg-white/5 dark:text-slate-300">
+        <span>
+          {waitingToStart
+            ? 'Head to the pickup point and start the ride when you arrive.'
+            : 'The ride is active. Mark it complete when you reach the destination.'}
+        </span>
+        <span
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold',
+            waitingToStart ? 'text-amber-600 dark:text-amber-400' : 'text-brand-600 dark:text-brand-400',
+          )}
+        >
           <Clock3 aria-hidden className="size-4" />
-          4 min
+          {waitingToStart ? 'Assigned' : 'In progress'}
         </span>
       </div>
+      {waitingToStart ? (
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={busy}
+          className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
+        >
+          <Navigation aria-hidden className="size-4.5" />
+          {busy ? 'Starting…' : 'Start Ride'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onComplete}
+          disabled={busy}
+          className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
+        >
+          <CheckCircle2 aria-hidden className="size-4.5" />
+          {busy ? 'Completing…' : 'Mark Ride Complete'}
+        </button>
+      )}
     </section>
   )
 }
 
-function OfflineCard({ onGoOnline }: { onGoOnline: () => void }) {
+function WaitingCard({ onOpenQueue }: { onOpenQueue: () => void }) {
+  return (
+    <section aria-label="No requests" className="rounded-3xl border border-ink-200/70 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
+      <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400">
+        <Map aria-hidden className="size-6" />
+      </span>
+      <h2 className="mt-4 text-base font-bold">No ride requests right now</h2>
+      <p className="mx-auto mt-1.5 max-w-60 text-sm leading-relaxed text-ink-500 dark:text-slate-400">
+        New requests appear here as students create groups. Keep an eye on the queue.
+      </p>
+      <button
+        type="button"
+        onClick={onOpenQueue}
+        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98]"
+      >
+        <BellRing aria-hidden className="size-4" />
+        Open queue
+      </button>
+    </section>
+  )
+}
+
+function OfflineCard({ onGoOnline, disabled }: { onGoOnline: () => void; disabled?: boolean }) {
   return (
     <section aria-label="Offline" className="rounded-3xl border border-ink-200/70 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
       <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-ink-100 text-ink-500 dark:bg-white/5 dark:text-slate-400">
@@ -339,7 +363,8 @@ function OfflineCard({ onGoOnline }: { onGoOnline: () => void }) {
       <button
         type="button"
         onClick={onGoOnline}
-        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98]"
+        disabled={disabled}
+        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
       >
         <Power aria-hidden className="size-4" />
         Go Online

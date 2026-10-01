@@ -4,15 +4,19 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Camera, FileCheck2, UploadCloud } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { authService } from '../../services/authService'
+import { isGoogleSignInConfigured, requestGoogleIdToken } from '../../services/googleAuth'
+import type { RegisterPayload } from '../../types'
 import { homePathForRole } from '../../utils/routing'
+import { initials } from '../../utils/nameInitials'
+import { checkPasswords } from '../../config/password'
 import { AuthLayout } from './AuthLayout'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { DarkField } from '../../components/ui/DarkField'
 import { Logo } from '../../components/ui/Logo'
-import { driverApplicationService } from '../../services/driverApplicationService'
-import { GoogleIcon, deriveName, fetchGoogleAccount, initials } from './sharedAuth'
+import { driverService } from '../../services/driverService'
+import { GoogleIcon, NameAndPasswordFields } from './sharedAuth'
 import { cn } from '../../utils/cn'
 
 type Step = 'email' | 'profile' | 'verifying'
@@ -23,15 +27,32 @@ interface DrivingDetails {
   licenseFile: string | null
 }
 
-type FieldErrors = Partial<Record<'fullName' | 'email' | 'phone' | 'plateNumber' | 'licenseFile', string>>
+type FieldErrors = Partial<
+  Record<
+    | 'firstName'
+    | 'lastName'
+    | 'email'
+    | 'phone'
+    | 'plateNumber'
+    | 'licenseFile'
+    | 'password'
+    | 'confirmation',
+    string
+  >
+>
 
 export function DriverRegister() {
   const { register, status } = useAuth()
   const navigate = useNavigate()
 
   const [step, setStep] = useState<Step>('email')
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
+  const [form, setForm] = useState<RegisterPayload>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+  })
   const [details, setDetails] = useState<DrivingDetails>({ phone: '', plateNumber: '', licenseFile: null })
   const [errors, setErrors] = useState<FieldErrors>({})
   const [busy, setBusy] = useState(false)
@@ -39,8 +60,11 @@ export function DriverRegister() {
   const [formError, setFormError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const name = fullName.trim()
-  const nameInitials = useMemo(() => initials(name || 'D R'), [name])
+  /** True when the name/email came from a verified Google token. */
+  const googleLinked = Boolean(form.googleIdToken)
+  const googleAvailable = isGoogleSignInConfigured()
+
+  const nameInitials = useMemo(() => initials(form.firstName, form.lastName), [form.firstName, form.lastName])
 
   // Redirect if already authenticated and not on the verifying screen.
   useEffect(() => {
@@ -51,9 +75,13 @@ export function DriverRegister() {
 
   // ----- Email / Google step ------------------------------------------------
 
+  /**
+   * Manual entry. The name fields stay empty on purpose — we no longer guess a
+   * person's name from their email address.
+   */
   const handleNext = (e: FormEvent) => {
     e.preventDefault()
-    const trimmed = email.trim()
+    const trimmed = form.email.trim()
     if (!trimmed) {
       setErrors((p) => ({ ...p, email: 'Enter your email address.' }))
       return
@@ -63,19 +91,31 @@ export function DriverRegister() {
       return
     }
     setErrors((p) => ({ ...p, email: undefined }))
-    setFullName((prev) => prev.trim() || deriveName(trimmed))
+    setForm((p) => ({ ...p, email: trimmed }))
     setStep('profile')
   }
 
-  /** Simulate a Google OAuth round-trip that returns the linked identity. */
+  /**
+   * Real Google sign-in. The ID token is verified by the backend, which replies
+   * with the first/last name we are allowed to prefill from the Google profile.
+   */
   const handleGoogle = async () => {
     setGoogleBusy(true)
+    setFormError(null)
     setErrors((p) => ({ ...p, email: undefined }))
     try {
-      const account = await fetchGoogleAccount(email)
-      setFullName((prev) => prev.trim() || account.fullName)
-      setEmail(account.email)
+      const idToken = await requestGoogleIdToken()
+      const identity = await authService.resolveGoogleIdentity(idToken)
+      setForm((p) => ({
+        ...p,
+        firstName: identity.first_name,
+        lastName: identity.last_name,
+        email: identity.email,
+        googleIdToken: idToken,
+      }))
       setStep('profile')
+    } catch (err) {
+      setFormError(err instanceof Error && err.message ? err.message : 'Google sign-in failed. Try again.')
     } finally {
       setGoogleBusy(false)
     }
@@ -89,11 +129,28 @@ export function DriverRegister() {
     setErrors((p) => ({ ...p, licenseFile: undefined }))
   }
 
+  const setField = (field: keyof RegisterPayload, value: string) => {
+    setForm((p) => ({ ...p, [field]: value }))
+    if (errors[field as keyof FieldErrors]) setErrors((p) => ({ ...p, [field]: undefined }))
+  }
+
+  /** Leave the Google pathway: drop the token and let the names be edited. */
+  const unlockNames = () => {
+    // Switching to manual registration must not keep names Google supplied.
+    setForm((p) => ({ ...p, googleIdToken: undefined, firstName: '', lastName: '' }))
+    setErrors((p) => ({ ...p, firstName: undefined, lastName: undefined }))
+  }
+
   const validateProfile = (): boolean => {
-    const emailValue = email.trim()
+    const emailValue = form.email.trim()
     const phoneDigits = details.phone.replace(/\D/g, '')
     const next: FieldErrors = {}
-    if (!fullName.trim()) next.fullName = 'Enter your full name.'
+    if (!form.firstName.trim()) next.firstName = 'Enter your first name.'
+    if (!form.lastName.trim()) {
+      next.lastName = googleLinked
+        ? 'Your Google account has no last name. Use "use a different name" to add one.'
+        : 'Enter your last name.'
+    }
     if (!emailValue) next.email = 'Enter your email address.'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) next.email = 'Enter a valid email address.'
     if (!details.phone.trim()) next.phone = 'Enter your phone number.'
@@ -103,8 +160,9 @@ export function DriverRegister() {
       next.plateNumber = 'Plate looks invalid (e.g. EPE-789XY).'
     }
     if (!details.licenseFile) next.licenseFile = 'Upload your permit or license.'
+    Object.assign(next, checkPasswords(form.password, form.confirmPassword))
     setErrors(next)
-    return !next.fullName && !next.email && !next.phone && !next.plateNumber && !next.licenseFile
+    return Object.values(next).every((message) => !message)
   }
 
   const handleRegister = async (e: FormEvent) => {
@@ -115,17 +173,25 @@ export function DriverRegister() {
     setFormError(null)
     setStep('verifying')
     try {
-      // Persist a session so the demo can continue into the app, and record the application.
-      await register({ fullName: fullName.trim(), email: email.trim(), phone: details.phone.replace(/\D/g, '') }, 'driver')
-      await driverApplicationService.submit({
-        fullName: fullName.trim(),
-        email: email.trim(),
-        phone: details.phone,
-        plateNumber: details.plateNumber,
-        licenseFile: details.licenseFile,
-      })
-    } catch {
-      setFormError('We could not verify your driver credentials. Please try again.')
+      // Register the driver account, then record the vehicle plate so the
+      // driver profile exists with their permit details.
+      await register(
+        {
+          ...form,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          email: form.email.trim().toLowerCase(),
+          phone: details.phone.replace(/\D/g, ''),
+        },
+        'driver',
+      )
+      await driverService.updateAvailability({ vehicle_plate: details.plateNumber.trim().toUpperCase() })
+    } catch (err) {
+      setFormError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'We could not verify your driver credentials. Please try again.',
+      )
       setStep('profile')
       setBusy(false)
     }
@@ -141,19 +207,27 @@ export function DriverRegister() {
       <p className="mt-1.5 text-sm text-ink-400">Create your account to get started.</p>
 
       <div className="mt-7">
-        <button
-          type="button"
-          onClick={handleGoogle}
-          disabled={googleBusy || busy}
-          className="flex h-13 w-full items-center justify-center gap-3 rounded-full bg-white text-sm font-semibold text-ink-900 transition hover:bg-gray-100 active:scale-[0.99] disabled:opacity-60"
-        >
-          {googleBusy ? <Spinner size="sm" className="text-ink-400" /> : <GoogleIcon />}
-          {googleBusy ? 'Connecting to Google…' : 'Continue with Google'}
-        </button>
+        {googleAvailable ? (
+          <button
+            type="button"
+            onClick={handleGoogle}
+            disabled={googleBusy || busy}
+            className="flex h-13 w-full items-center justify-center gap-3 rounded-full bg-white text-sm font-semibold text-ink-900 transition hover:bg-gray-100 active:scale-[0.99] disabled:opacity-60"
+          >
+            {googleBusy ? <Spinner size="sm" className="text-ink-400" /> : <GoogleIcon />}
+            {googleBusy ? 'Connecting to Google…' : 'Continue with Google'}
+          </button>
+        ) : (
+          <p className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[13px] text-ink-500">
+            Google sign-in is not configured for this environment yet. Register with your email below.
+          </p>
+        )}
 
         <div className="my-6 flex items-center gap-3">
           <span className="h-px flex-1 bg-white/10" />
-          <span className="text-xs font-medium uppercase tracking-wider text-ink-500">or</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-ink-500">
+            {googleAvailable ? 'or' : ''}
+          </span>
           <span className="h-px flex-1 bg-white/10" />
         </div>
 
@@ -164,18 +238,15 @@ export function DriverRegister() {
             inputMode="email"
             autoComplete="email"
             placeholder="driver@email.com"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value)
-              if (errors.email) setErrors((p) => ({ ...p, email: undefined }))
-            }}
+            value={form.email}
+            onChange={(e) => setField('email', e.target.value)}
             error={errors.email}
           />
           <Button
             type="submit"
             size="lg"
             fullWidth
-            disabled={googleBusy || busy || !email.trim()}
+            disabled={googleBusy || busy || !form.email.trim()}
             className="rounded-full bg-gradient-to-r from-brand-500 to-brand-600 text-base font-semibold shadow-sm hover:from-brand-400 hover:to-brand-500 disabled:from-brand-600/40 disabled:to-brand-600/40 disabled:text-white/60"
           >
             Next
@@ -212,16 +283,18 @@ export function DriverRegister() {
       </div>
 
       <form onSubmit={handleRegister} className="mt-6 space-y-4" noValidate>
-        <DarkField
-          label="Full name"
-          autoComplete="name"
-          placeholder="e.g. Musa Ibrahim"
-          value={fullName}
-          onChange={(e) => {
-            setFullName(e.target.value)
-            if (errors.fullName) setErrors((p) => ({ ...p, fullName: undefined }))
-          }}
-          error={errors.fullName}
+        <NameAndPasswordFields
+          firstName={form.firstName}
+          lastName={form.lastName}
+          password={form.password}
+          confirmation={form.confirmPassword}
+          locked={googleLinked}
+          errors={errors}
+          onFirstName={(v) => setField('firstName', v)}
+          onLastName={(v) => setField('lastName', v)}
+          onPassword={(v) => setField('password', v)}
+          onConfirmation={(v) => setField('confirmPassword', v)}
+          onUnlockNames={unlockNames}
         />
         <DarkField
           label="Phone number"
@@ -242,12 +315,12 @@ export function DriverRegister() {
           inputMode="email"
           autoComplete="email"
           placeholder="driver@email.com"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value)
-            if (errors.email) setErrors((p) => ({ ...p, email: undefined }))
-          }}
+          value={form.email}
+          onChange={(e) => setField('email', e.target.value)}
           error={errors.email}
+          readOnly={googleLinked}
+          hint={googleLinked ? 'Taken from your Google account.' : undefined}
+          className={googleLinked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
         />
         <DarkField
           label="Plate number"

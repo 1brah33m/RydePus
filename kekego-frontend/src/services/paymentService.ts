@@ -1,46 +1,116 @@
-import type { Payment, PaymentRequest, PaymentResult } from '../types'
-import { CURRENCY } from '../mock/data'
-import { delay } from '../utils/delay'
-import * as backend from './mockBackend'
+import type { Payment, PaymentMethod, PaymentStatus } from '../types'
+import { CURRENCY } from '../config/pricing'
+import { apiClient } from './apiClient'
 
 /**
- * Payment service.
+ * Payment service — wired to the Django backend.
  *
- * Mock implementation — no real money is processed. Swap the internals with a
- * real provider later (e.g. Paystack/Flutterwave via POST /api/v1/payments).
- * The UI only consumes PaymentResult.
+ *   GET  /api/v1/payments/                 -> getPayments()          (student's own)
+ *   POST /api/v1/payments/                 -> recordPayment()        (cash or transfer)
+ *   GET  /api/v1/payments/collectable/     -> getCollectablePayments (driver)
+ *   POST /api/v1/payments/{id}/confirm/    -> confirmPayment()       (driver)
+ *   POST /api/v1/payments/{id}/reject/     -> rejectPayment()        (driver)
+ *
+ * There is no payment gateway: a student pays the driver by cash or direct
+ * transfer, and the driver confirms receipt manually.
  */
 
+export interface ApiPayment {
+  id: number
+  trip: number | null
+  group: number | null
+  payer: number
+  payer_name: string
+  amount: string
+  currency: string
+  seats: number
+  kind: 'TRIP' | 'GROUP_BUYOUT'
+  method: 'CASH' | 'BANK_TRANSFER'
+  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED'
+  awaiting_confirmation: boolean
+  confirmed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+function apiStatusToFrontend(api: ApiPayment['status']): PaymentStatus {
+  switch (api) {
+    case 'SUCCESSFUL':
+      return 'SUCCESS'
+    case 'FAILED':
+      return 'FAILED'
+    default:
+      return 'PENDING'
+  }
+}
+
+function mapPayment(api: ApiPayment): Payment {
+  return {
+    id: String(api.id),
+    reference: `REF-${api.id}`,
+    tripId: api.trip !== null ? String(api.trip) : undefined,
+    groupId: api.group !== null ? String(api.group) : undefined,
+    amount: Number(api.amount),
+    seats: api.seats,
+    currency: api.currency || CURRENCY,
+    status: apiStatusToFrontend(api.status),
+    method: api.method,
+    payerName: api.payer_name,
+    awaitingConfirmation: api.awaiting_confirmation,
+    confirmedAt: api.confirmed_at ?? undefined,
+    createdAt: api.created_at,
+  }
+}
+
+export interface ProcessPaymentInput {
+  tripId: string
+  amount: number
+  method: PaymentMethod
+  currency?: string
+}
+
 export class PaymentService {
-  async processPayment(request: PaymentRequest): Promise<PaymentResult> {
-    await delay(1400)
+  /** The signed-in student's payment records. */
+  async getPayments(): Promise<Payment[]> {
+    const payments = await apiClient.get<ApiPayment[]>('/payments/', { auth: true })
+    return payments.map(mapPayment)
+  }
 
-    // Simulate a provider response that can occasionally fail.
-    const succeeded = Math.random() > 0.05
+  /**
+   * Record a fare payment made by hand. It stays PENDING until the assigned
+   * driver confirms they received the cash or the transfer.
+   */
+  async processPayment(input: ProcessPaymentInput): Promise<Payment> {
+    const api = await apiClient.post<ApiPayment>(
+      '/payments/',
+      {
+        trip: Number(input.tripId),
+        amount: input.amount,
+        method: input.method,
+        currency: input.currency ?? CURRENCY,
+      },
+      { auth: true },
+    )
+    return mapPayment(api)
+  }
 
-    const payment: Payment = {
-      id: crypto.randomUUID(),
-      reference: `REF-${Date.now().toString(36).toUpperCase()}`,
-      amount: request.amount,
-      seats: request.seats,
-      currency: request.currency,
-      status: succeeded ? 'SUCCESS' : 'FAILED',
-      method: request.method,
-      createdAt: new Date().toISOString(),
-    }
+  /** Driver: fares claimed by students on this driver's rides. */
+  async getCollectablePayments(): Promise<Payment[]> {
+    const payments = await apiClient.get<ApiPayment[]>('/payments/collectable/', { auth: true })
+    return payments.map(mapPayment)
+  }
 
-    if (succeeded) {
-      backend.addPayment(payment)
-    }
+  /** Driver: confirms the cash/transfer was received. */
+  async confirmPayment(paymentId: string): Promise<Payment> {
+    const api = await apiClient.post<ApiPayment>(`/payments/${paymentId}/confirm/`, undefined, { auth: true })
+    return mapPayment(api)
+  }
 
-    return {
-      payment,
-      reference: payment.reference,
-      status: succeeded ? 'SUCCESS' : 'FAILED',
-    }
+  /** Driver: reports that the money never arrived. */
+  async rejectPayment(paymentId: string): Promise<Payment> {
+    const api = await apiClient.post<ApiPayment>(`/payments/${paymentId}/reject/`, undefined, { auth: true })
+    return mapPayment(api)
   }
 }
 
 export const paymentService = new PaymentService()
-
-export { CURRENCY }

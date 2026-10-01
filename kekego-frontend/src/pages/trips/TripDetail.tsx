@@ -11,18 +11,25 @@ import { TripStatusBadge } from '../../components/ui/StatusBadge'
 import { RouteIndicator } from '../../components/shared/RouteIndicator'
 import { DriverCard } from '../../components/driver/DriverCard'
 import { RatingStars } from '../../components/driver/RatingStars'
+import { ManualPaymentCard } from '../../components/payment/ManualPaymentCard'
 import { Input } from '../../components/ui/Input'
 import { isTripCancellationLocked } from '../../utils/rideStatus'
-import type { Trip } from '../../types'
+import type { PaymentMethod, Trip } from '../../types'
 
 export function TripDetail() {
   const { tripId } = useParams<{ tripId: string }>()
   const navigate = useNavigate()
-  const { state, getDriverById, cancelTrip, submitRating, settleActivity } = useApp()
+  const { state, getDriverById, cancelTrip, submitRating, payForTrip, settleActivity } = useApp()
 
   const trip = useMemo(
     () => state.trips.find((t) => t.id === tripId) ?? state.trips.find((t) => t.code === tripId),
     [state.trips, tripId],
+  )
+
+  /** This student's own payment for the trip, if one was recorded. */
+  const myPayment = useMemo(
+    () => state.payments.find((p) => p.tripId === (trip?.id ?? tripId)),
+    [state.payments, tripId, trip?.id],
   )
 
   const [rating, setRating] = useState(0)
@@ -160,17 +167,27 @@ export function TripDetail() {
               </div>
               {trip.comment && <p className="mt-2 text-sm text-ink-600 dark:text-slate-400">“{trip.comment}”</p>}
               {driver && (
-                <div className="mt-4 border-t border-ink-100 pt-3 text-sm">
+                <div className="mt-4 border-t border-ink-100 pt-3 text-sm dark:border-white/5">
                   <p className="text-xs text-ink-400 dark:text-slate-500">Driver</p>
                   <p className="font-medium text-ink-800 dark:text-slate-200">
                     {driver.name} · {driver.kekeIdentifier}
                   </p>
                 </div>
               )}
-              <Button className="mt-5" fullWidth onClick={finish}>
+
+              <Button className="mt-4" fullWidth onClick={finish}>
                 Done
               </Button>
             </Card>
+          )}
+
+          {driver && (
+            <ManualPaymentCard
+              trip={trip}
+              driver={driver}
+              payment={myPayment}
+              onPay={(method: PaymentMethod) => payForTrip(trip.id, method).then(() => undefined)}
+            />
           )}
         </div>
       </>
@@ -197,7 +214,7 @@ export function TripDetail() {
           </div>
           <RouteIndicator pickup={trip.pickup} destination={trip.destination} className="mt-2" />
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-500/10 px-3 py-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
-            Passengers <strong>4/4</strong>
+            Passengers <strong>{trip.passengerCount ?? 0}</strong>
           </div>
           <p className="mt-3 text-sm text-ink-600 dark:text-slate-400">
             {inProgress
@@ -210,6 +227,15 @@ export function TripDetail() {
 
         {inProgress && (
           <RouteProgress pickup={trip.pickup.name} destination={trip.destination.name} statusLabel="ON THE WAY" />
+        )}
+
+        {driver && (
+          <ManualPaymentCard
+            trip={trip}
+            driver={driver}
+            payment={myPayment}
+            onPay={(method: PaymentMethod) => payForTrip(trip.id, method).then(() => undefined)}
+          />
         )}
 
         {callNotice && <Alert tone="info">Calling would open your phone dialer. (Placeholder — demo only.)</Alert>}
@@ -250,6 +276,9 @@ export function TripDetail() {
   )
 }
 
+/**
+ * Cancellation-locked notice: shown once a driver is matched or accepted.
+ */
 function CancellationLockedNotice({ status }: { status: Trip['status'] }) {
   const message =
     status === 'DRIVER_ASSIGNED'

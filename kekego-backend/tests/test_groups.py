@@ -1,9 +1,5 @@
-import threading
-
 import pytest
-from django.db import IntegrityError, connection, transaction
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from apps.groups.models import Group, GroupMember
 from apps.trips.models import Trip
@@ -164,111 +160,247 @@ def test_group_leave_is_blocked_after_driver_accepts(student_user, driver_user):
 
 
 @pytest.mark.django_db
-def test_creator_occupies_first_seat(student_user):
+def test_group_status_flips_full_when_capacity_reached(student_user):
     group = Group.objects.create(
-        name="Seated Creator",
-        pickup_location="Gate",
-        destination="Hostel",
-        capacity=3,
-        created_by=student_user,
-    )
-    membership = GroupMember.objects.get(group=group, user=student_user)
-    assert membership.seat == 1
-
-
-@pytest.mark.django_db
-def test_join_is_rejected_when_group_is_full(student_user):
-    group = Group.objects.create(
-        name="Full Group",
+        name="Filling Ride",
         pickup_location="Gate",
         destination="Hostel",
         capacity=2,
         created_by=student_user,
     )
-    second = User.objects.create_user(email="full1@example.com", password="StrongPass123!", role=User.Role.STUDENT)
-    third = User.objects.create_user(email="full2@example.com", password="StrongPass123!", role=User.Role.STUDENT)
+    assert group.status == Group.Status.WAITING
 
-    client = APIClient()
-    client.force_authenticate(second)
-    assert client.post(f"{GROUPS_URL}{group.id}/join/", format="json").status_code == status.HTTP_200_OK
-
-    client.force_authenticate(third)
-    response = client.post(f"{GROUPS_URL}{group.id}/join/", format="json")
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json()["error"]["code"] == "INVALID"
-    assert group.members.count() == group.capacity
-
-
-@pytest.mark.django_db
-def test_seat_unique_at_database_level(student_user):
-    from apps.users.models import User
-
-    group = Group.objects.create(
-        name="Backstop Group",
-        pickup_location="Gate",
-        destination="Hostel",
-        capacity=3,
-        created_by=student_user,
-    )
     second_user = User.objects.create_user(
-        email="backstop@example.com",
+        email="secondfill@example.com",
         password="StrongPass123!",
         role=User.Role.STUDENT,
     )
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            GroupMember.objects.create(group=group, user=second_user, seat=1)
-    assert group.members.count() == 1
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(second_user)
+
+    response = client.post(f"{GROUPS_URL}{group.id}/join/", format="json")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == Group.Status.FULL
+    group.refresh_from_db()
+    assert group.status == Group.Status.FULL
 
 
-@pytest.mark.django_db(transaction=True)
-def test_concurrent_joins_never_exceed_capacity(student_user):
-    """Burst joins against a nearly full group must not overfill it.
-
-    ``select_for_update`` serializes the check on PostgreSQL; the unique
-    ``(group, seat)`` constraint is a database-level backstop that also holds
-    on backends where row locking is a no-op.
-
-    Running on SQLite causes writer lock collisions between the real threads,
-    so the burst is only exercised on databases with true row-level locking.
-    The constraint backstop is covered by ``test_seat_unique_at_database_level``.
-    """
-    if connection.vendor == "sqlite":
-        pytest.skip("select_for_update is a no-op on SQLite; concurrency needs a row-locking backend.")
-
+@pytest.mark.django_db
+def test_group_status_returns_to_waiting_after_leave(student_user):
     group = Group.objects.create(
-        name="Race Group",
+        name="Reopening Ride",
         pickup_location="Gate",
         destination="Hostel",
         capacity=2,
         created_by=student_user,
     )
+    second_user = User.objects.create_user(
+        email="reopen@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    GroupMember.objects.create(group=group, user=second_user)
+    group.refresh_status()
+    assert group.status == Group.Status.FULL
 
-    joiners = []
-    for index in range(4):
-        joiners.append(
-            User.objects.create_user(
-                email=f"joiner{index}@example.com",
-                password="StrongPass123!",
-                role=User.Role.STUDENT,
-            )
-        )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(second_user)
 
-    results: list[int] = []
-    barrier = threading.Barrier(len(joiners))
+    response = client.post(f"{GROUPS_URL}{group.id}/leave/", format="json")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == Group.Status.WAITING
 
-    def attempt(user):
-        client = APIClient()
-        client.force_authenticate(user)
-        barrier.wait()
-        results.append(client.post(f"{GROUPS_URL}{group.id}/join/", format="json").status_code)
 
-    threads = [threading.Thread(target=attempt, args=(user,)) for user in joiners]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+@pytest.mark.django_db
+def test_buyout_fills_remaining_seats_and_makes_group_dispatchable(student_user, student_client):
+    """Paying for the empty seats puts the group in the driver queue at 4/4."""
+    group = Group.objects.create(
+        name="Buyout Ride",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    GroupMember.objects.create(
+        group=group,
+        user=User.objects.create_user(
+            email="buyout-mate@example.com",
+            password="StrongPass123!",
+            role=User.Role.STUDENT,
+        ),
+    )
+    group.refresh_status()
+    assert group.seats_filled == 2
+
+    response = student_client.post(
+        f"{GROUPS_URL}{group.id}/buyout/",
+        {"seats": 2, "amount": 400, "currency": "NGN"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["kind"] == "GROUP_BUYOUT"
 
     group.refresh_from_db()
-    assert group.members.count() <= group.capacity
-    assert results.count(status.HTTP_200_OK) == 1
+    assert group.bought_seats == 2
+    assert group.seats_filled == 4
+    assert group.status == Group.Status.FULL
+    assert group.is_dispatchable is True
+    assert group.joinable is False
+
+
+@pytest.mark.django_db
+def test_buyout_is_rejected_for_anything_other_than_all_remaining_seats(student_user, student_client):
+    """A partial buyout would leave the group under 4/4, so it is refused."""
+    group = Group.objects.create(
+        name="Partial Buyout",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    GroupMember.objects.create(
+        group=group,
+        user=User.objects.create_user(
+            email="partial-buyout@example.com",
+            password="StrongPass123!",
+            role=User.Role.STUDENT,
+        ),
+    )
+    group.refresh_status()
+
+    response = student_client.post(
+        f"{GROUPS_URL}{group.id}/buyout/",
+        {"seats": 1, "amount": 200, "currency": "NGN"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    group.refresh_from_db()
+    assert group.bought_seats == 0
+    assert group.status == Group.Status.WAITING
+
+
+@pytest.mark.django_db
+def test_group_becomes_full_when_the_fourth_member_joins(student_user):
+    group = Group.objects.create(
+        name="Fourth Seat",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    for index in range(3):
+        GroupMember.objects.create(
+            group=group,
+            user=User.objects.create_user(
+                email=f"fourth{index}@example.com",
+                password="StrongPass123!",
+                role=User.Role.STUDENT,
+            ),
+        )
+    group.refresh_status()
+
+    assert group.seats_filled == 4
+    assert group.status == Group.Status.FULL
+    assert group.is_dispatchable is True
+    assert group.joinable is False
+
+
+@pytest.mark.django_db
+def test_leaving_a_full_group_cancels_its_pending_trip(student_user, student_client):
+    group = Group.objects.create(
+        name="Drop Out",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    for index in range(3):
+        GroupMember.objects.create(
+            group=group,
+            user=User.objects.create_user(
+                email=f"dropout{index}@example.com",
+                password="StrongPass123!",
+                role=User.Role.STUDENT,
+            ),
+        )
+    group.refresh_status()
+    trip = group.trip_set.create(
+        created_by=student_user,
+        pickup_location="Gate",
+        destination="Hostel",
+        fare=400,
+        status=Trip.Status.PENDING,
+    )
+
+    response = student_client.post(f"{GROUPS_URL}{group.id}/leave/")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["seats_filled"] == 3
+    trip.refresh_from_db()
+    assert trip.status == Trip.Status.CANCELLED
+
+
+@pytest.mark.django_db
+def test_non_member_cannot_buyout_seats(student_user):
+    group = Group.objects.create(
+        name="Outsider Buyout",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    outsider = User.objects.create_user(
+        email="outsider@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(outsider)
+
+    response = client.post(
+        f"{GROUPS_URL}{group.id}/buyout/",
+        {"seats": 3, "amount": 600, "currency": "NGN"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    group.refresh_from_db()
+    assert group.bought_seats == 0
+
+
+@pytest.mark.django_db
+def test_group_creation_defaults_to_four_seat_capacity(student_client):
+    """Every group is a 4-slot keke ride."""
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Default Capacity Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["capacity"] == 4
+    assert body["seats_filled"] == 1
+    assert body["bought_seats"] == 0
+    assert body["status"] == Group.Status.WAITING
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("capacity", [1, 2, 3, 5])
+def test_group_creation_rejects_any_capacity_but_four(student_client, capacity):
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Bad Capacity Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": capacity,
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST

@@ -1,30 +1,58 @@
 import { useId } from 'react'
-import type { InputHTMLAttributes, SelectHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import { cn } from '../../utils/cn'
 
 /** Dark surface input field for charcoal registration screens. */
-export function DarkField({ label, error, className, ...props }: { label: string; error?: string } & InputHTMLAttributes<HTMLInputElement>) {
+export function DarkField({
+  label,
+  error,
+  hint,
+  trailingIcon,
+  className,
+  containerClassName,
+  ...props
+}: {
+  label: string
+  error?: string
+  /** Muted helper text below the field; replaced by the error when present. */
+  hint?: string
+  trailingIcon?: ReactNode
+  containerClassName?: string
+} & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId()
   return (
-    <div className="w-full">
+    <div className={cn('w-full', containerClassName)}>
       <label htmlFor={id} className="mb-1.5 block text-[13px] font-medium text-ink-300">
         {label}
       </label>
-      <input
-        id={id}
-        aria-invalid={error ? true : undefined}
-        className={cn(
-          'h-13 w-full rounded-xl bg-white/[0.07] px-4 text-base text-white placeholder:text-ink-500 transition-shadow',
-          'border focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 focus:outline-none',
-          error ? 'border-rose-400/60' : 'border-white/10',
-          className,
+      <div className="relative">
+        <input
+          id={id}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || hint ? `${id}-help` : undefined}
+          className={cn(
+            'h-13 w-full rounded-xl bg-white/[0.07] px-4 text-base text-white placeholder:text-ink-500 transition-shadow',
+            trailingIcon ? 'pr-11' : undefined,
+            'border focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 focus:outline-none',
+            error ? 'border-rose-400/60' : 'border-white/10',
+            className,
+          )}
+          {...props}
+        />
+        {trailingIcon && (
+          <span className="absolute inset-y-0 right-3 flex items-center">{trailingIcon}</span>
         )}
-        {...props}
-      />
-      {error && (
-        <p role="alert" className="mt-1.5 text-sm text-rose-400">
+      </div>
+      {error ? (
+        <p id={`${id}-help`} role="alert" className="mt-1.5 text-sm text-rose-400">
           {error}
         </p>
+      ) : (
+        hint && (
+          <p id={`${id}-help`} className="mt-1.5 text-[13px] text-ink-500">
+            {hint}
+          </p>
+        )
       )}
     </div>
   )
