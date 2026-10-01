@@ -23,6 +23,9 @@ staticfiles/
 backups/
 backups/*.dump
 backups/*.sqlite
+# Stray SQLite copies (e.g. a manual pre-migration backup) hold real data.
+*.sqlite3
+!db.sqlite3
 
 # Test / coverage / lint
 .pytest_cache/
