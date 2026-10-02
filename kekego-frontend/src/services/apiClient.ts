@@ -12,9 +12,25 @@
  *   plain Error with the server's human-readable message.
  */
 
+const RAW_API_BASE_URL: string =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? ''
+
 const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ??
-  'http://127.0.0.1:8000/api/v1'
+  RAW_API_BASE_URL.replace(/\/+$/, '') || 'http://127.0.0.1:8000/api/v1'
+
+/**
+ * Vite inlines env values at BUILD time. If the deploy host never provided
+ * VITE_API_BASE_URL we would otherwise ship a bundle pointing at 127.0.0.1,
+ * which happens to work on the build machine and fails silently on every real
+ * device (on a phone, 127.0.0.1 is the phone). Say so at build time instead.
+ */
+if (!RAW_API_BASE_URL) {
+  const detail =
+    import.meta.env.PROD
+      ? 'No VITE_API_BASE_URL was set for this build, so requests fall back to http://127.0.0.1:8000/api/v1. Sign In will work on this machine only and fail on real devices. Set VITE_API_BASE_URL in the deploy environment and rebuild.'
+      : 'No VITE_API_BASE_URL set; falling back to http://127.0.0.1:8000/api/v1 for local development.'
+  console.warn(`[apiClient] ${detail}`)
+}
 
 const ACCESS_KEY = 'rydepus.jwt.access.v1'
 const REFRESH_KEY = 'rydepus.jwt.refresh.v1'
@@ -159,6 +175,15 @@ async function request<T>(path: string, options: RequestOptions, alreadyRetried 
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     })
   } catch {
+    // A cross-origin block (CORS, HTTPS/HTTP mismatch, or an unreachable host)
+    // surfaces here as an opaque TypeError with no status. Say something
+    // actionable instead of the misleading "make sure the backend is running",
+    // which is wrong for every deployed build.
+    if (import.meta.env.PROD) {
+      throw new Error(
+        'Could not reach the Rydepus API. This is usually the API address being wrong, or the server not allowing this site (CORS).',
+      )
+    }
     throw new Error('Could not reach the Rydepus API. Make sure the backend is running.')
   }
 
