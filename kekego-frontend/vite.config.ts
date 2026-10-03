@@ -7,18 +7,24 @@ import { defineConfig, loadEnv } from 'vite'
 export default defineConfig(({ mode }) => {
   // A missing VITE_API_BASE_URL silently ships a bundle pointing at 127.0.0.1,
   // which works on the build machine and fails on every real device. Fail the
-  // build instead so it cannot reach production unnoticed.
+  // build instead so it cannot reach production unnoticed. Development is
+  // exempt: there the localhost fallback is the intended behaviour.
   const env = loadEnv(mode, process.cwd(), 'VITE_')
-  if (!env.VITE_API_BASE_URL?.trim()) {
+  const apiBase = env.VITE_API_BASE_URL?.trim() ?? ''
+
+  // In development the localhost fallback in src/services/apiClient.ts is what
+  // we want, so only enforce these for real builds. `npm run dev` must work with
+  // no configuration at all.
+  if (!apiBase && mode !== 'development') {
     throw new Error(
       'VITE_API_BASE_URL is not set.\n' +
         'Set it before building, e.g. VITE_API_BASE_URL=https://your-api.example.com/api/v1\n' +
         'It is inlined into the bundle at build time; setting it on the host after the build has no effect.',
     )
   }
-  if (env.VITE_API_BASE_URL.startsWith('http://') && mode !== 'development') {
+  if (apiBase.startsWith('http://') && mode !== 'development') {
     throw new Error(
-      `VITE_API_BASE_URL is http:// (${env.VITE_API_BASE_URL}). ` +
+      `VITE_API_BASE_URL is http:// (${apiBase}). ` +
         'An HTTPS page cannot call an HTTP API -- browsers block it as mixed content. Use https://.',
     )
   }
