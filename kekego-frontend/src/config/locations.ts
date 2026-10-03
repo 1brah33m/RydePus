@@ -10,39 +10,29 @@ import type { CampusLocation } from '../types'
 
 export const CAMPUS_LOCATIONS: CampusLocation[] = [
   { id: 'main-gate', name: 'Main Gate' },
-  { id: 'engineering', name: 'Faculty of Engineering' },
   { id: 'soa', name: 'School of Agriculture' },
-  { id: 'EVM', name: 'Faculty of Environmental Services' },
+  { id: 'EVM', name: 'Faculty of Environmental Sciences' },
   { id: 'ECE', name: 'ECE Department' },
-  { id: 'auditorium', name: 'Main Auditorium' },
-  { id: 'middle-block', name: 'Middle Block' },
   { id: 'hostelFemale', name: 'Hostel Area(Female)' },
   { id: 'hostelMale', name: 'Hostel Area(Male)' },
-  { id: 'library', name: 'Library' },
-  { id: 'lecture-theatre', name: 'Lecture Theatre' },
+  { id: 'lecture-theatre', name: 'Lecture Theatre Hall' },
   { id: 'staff-club', name: 'Staff Club' },
   { id: 'CHE', name: 'CHE Department' },
   { id: 'main-mosque', name: 'Main University Mosque' },
-  { id: 'engineering-workshop', name: 'Engineering Workshop' },
 ]
 
 /** Approximate coordinates so route distances (and fares) can be computed. */
 export const LOCATION_COORDS: Record<string, { lat: number; lng: number }> = {
   'main-gate': { lat: 7.7945, lng: 4.5251 },
-  engineering: { lat: 7.7988, lng: 4.5142 },
   soa: { lat: 7.7899, lng: 4.5189 },
   EVM: { lat: 7.7951, lng: 4.5108 },
-  ECE: { lat: 7.8002, lng: 4.518},
-  auditorium: { lat: 7.7937, lng: 4.5216 },
-  'middle-block': { lat: 7.7966, lng: 4.5247 },
+  ECE: { lat: 7.8002, lng: 4.518 },
   hostelFemale: { lat: 7.7852, lng: 4.5263 },
   hostelMale: { lat: 7.7891, lng: 4.5281 },
-  library: { lat: 7.7981, lng: 4.5201 },
   'lecture-theatre': { lat: 7.7924, lng: 4.5161 },
   'staff-club': { lat: 7.8001, lng: 4.5222 },
   CHE: { lat: 7.8022, lng: 4.5191 },
   'main-mosque': { lat: 7.7874, lng: 4.5234 },
-  'engineering-workshop': { lat: 7.8012, lng: 4.5101 },
 }
 
 const byId = new Map(CAMPUS_LOCATIONS.map((l) => [l.id, l] as const))

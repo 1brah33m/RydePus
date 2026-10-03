@@ -18,12 +18,16 @@ import { RMark } from '../../components/ui/Logo'
 
 /** Hardcoded campus landmarks used in the booking card dropdowns. */
 const LANDMARKS = [
-  'Gate 1',
-  'Faculty of Science',
-  'Management Sciences',
-  '3-in-1 Lecture Theatre',
+  'Main Gate',
   'School of Agriculture',
-  'Main Library',
+  'ECE department',
+  'Hostel Area(Female)',
+  'Hostel Area(Male)',
+  'Faculty of Environmental Sciences',
+  'Staff Club',
+  'Main University Mosque',
+  'CHE Department',
+  'Lecture Theatre Hall',
 ]
 
 /** Top-level marketing navigation; page nodes scroll, route nodes navigate. */
