@@ -121,6 +121,15 @@ class TripCreateSerializer(serializers.ModelSerializer):
                 f"({value.seats_filled}/{value.capacity}). Wait for more passengers or buy out the remaining seats."
             )
 
+        # A group that already rode cannot be dispatched again. is_dispatchable
+        # counts seats only, so a full group stays dispatchable indefinitely and
+        # a client that re-requests would otherwise create a second trip for a
+        # ride that has already been taken.
+        if value.trip_set.filter(status=Trip.Status.COMPLETED).exists():
+            raise serializers.ValidationError(
+                "This group already completed its ride. Leave the group and create a new one to travel again."
+            )
+
         if value.trip_set.filter(
             status__in=[Trip.Status.PENDING, Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS]
         ).exists():

@@ -116,6 +116,75 @@ def test_second_trip_is_rejected_for_an_already_dispatched_group(student_user, s
 
 
 @pytest.mark.django_db
+def test_trip_is_rejected_for_a_group_that_already_completed_a_ride(
+    student_user, student_client
+):
+    """A full group stays dispatchable after its ride, so the completed trip
+    has to be what blocks a second one."""
+    group = Group.objects.create(
+        name="Repeat Ride",
+        pickup_location="Main Gate",
+        destination="Hostel Block",
+        capacity=4,
+        created_by=student_user,
+    )
+    _fill_group(group, student_user)
+    payload = {
+        "group": group.id,
+        "pickup_location": "Main Gate",
+        "destination": "Hostel Block",
+        "fare": 200,
+    }
+
+    first = student_client.post(TRIPS_URL, payload, format="json")
+    assert first.status_code == status.HTTP_201_CREATED
+
+    trip = Trip.objects.get(group=group)
+    trip.status = Trip.Status.COMPLETED
+    trip.save(update_fields=["status"])
+
+    group.refresh_from_db()
+    assert group.is_dispatchable, "group should still look full after completing"
+
+    second = student_client.post(TRIPS_URL, payload, format="json")
+
+    assert second.status_code == status.HTTP_400_BAD_REQUEST
+    assert "already completed" in str(second.json())
+    assert Trip.objects.filter(group=group).count() == 1
+
+
+@pytest.mark.django_db
+def test_trip_can_be_created_again_after_a_cancelled_ride(student_user, student_client):
+    """A cancelled ride leaves the group wanting to travel, so it may re-dispatch."""
+    group = Group.objects.create(
+        name="Retry Ride",
+        pickup_location="Main Gate",
+        destination="Hostel Block",
+        capacity=4,
+        created_by=student_user,
+    )
+    _fill_group(group, student_user)
+    payload = {
+        "group": group.id,
+        "pickup_location": "Main Gate",
+        "destination": "Hostel Block",
+        "fare": 200,
+    }
+
+    first = student_client.post(TRIPS_URL, payload, format="json")
+    assert first.status_code == status.HTTP_201_CREATED
+
+    trip = Trip.objects.get(group=group)
+    trip.status = Trip.Status.CANCELLED
+    trip.save(update_fields=["status"])
+
+    second = student_client.post(TRIPS_URL, payload, format="json")
+
+    assert second.status_code == status.HTTP_201_CREATED
+    assert Trip.objects.filter(group=group).count() == 2
+
+
+@pytest.mark.django_db
 def test_driver_can_accept_trip(driver_user, student_user):
     group = Group.objects.create(
         name="Hostel Ride",
