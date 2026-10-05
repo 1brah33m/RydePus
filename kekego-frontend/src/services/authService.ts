@@ -102,6 +102,77 @@ function splitFullName(fullName: string): { first_name: string; last_name: strin
   }
 }
 
+const GENERIC_LOGIN_ERROR = 'We could not sign you in. Check your email and password and try again.'
+
+/** Anything object-shaped that might carry a server response body. */
+type MaybeResponse = {
+  detail?: unknown
+  non_field_errors?: unknown
+  error?: { message?: unknown } | unknown
+  errors?: Record<string, unknown>
+  message?: unknown
+  response?: { data?: MaybeResponse }
+  data?: MaybeResponse
+}
+
+function firstString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstString(item)
+      if (found) return found
+    }
+  }
+  if (value && typeof value === 'object') {
+    // DRF nests messages differently depending on the failure: a field map such
+    // as { email: ['Enter a valid email address.'] }, or { field: { detail } }.
+    // Prefer explicit message/detail keys, then walk the values.
+    const record = value as Record<string, unknown>
+    const direct = firstString(record.message) ?? firstString(record.detail)
+    if (direct) return direct
+    for (const nested of Object.values(record)) {
+      const found = firstString(nested)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/**
+ * Best-effort extraction of a readable message from a failed login.
+ *
+ * `apiClient` already unwraps the shared `{ error: { message } }` envelope and
+ * throws a plain `Error`, so `err.message` is the normal path. The other shapes
+ * are handled defensively so a login failure can never surface as a blank alert
+ * if the transport ever changes (raw DRF `detail`, DRF `non_field_errors`, or
+ * an axios-style `err.response.data` if the HTTP client is ever swapped).
+ */
+function messageFromLoginError(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'string' && err.trim()) return err.trim()
+
+  if (err && typeof err === 'object') {
+    const candidates: MaybeResponse[] = []
+    const asResponse = err as MaybeResponse
+    if (asResponse.response?.data) candidates.push(asResponse.response.data)
+    if (asResponse.data) candidates.push(asResponse.data)
+    candidates.push(asResponse)
+
+    for (const body of candidates) {
+      const nested = body.error && typeof body.error === 'object' ? (body.error as { message?: unknown }) : null
+      const found =
+        firstString(nested?.message) ??
+        firstString(body.detail) ??
+        firstString(body.non_field_errors) ??
+        firstString(body.errors) ??
+        firstString(body.message)
+      if (found) return found
+    }
+  }
+
+  return GENERIC_LOGIN_ERROR
+}
+
 function buildRegisterBody(payload: RegisterPayload, role: UserRole): Record<string, string> {
   const password = payload.password
   if (!password) {
@@ -133,10 +204,17 @@ export class AuthService {
       throw new Error('Sign-in uses email. Enter the email you registered with.')
     }
 
-    const data = await apiClient.post<AuthResponse>('/auth/login/', {
-      email: email.toLowerCase(),
-      password,
-    })
+    let data: AuthResponse
+    try {
+      data = await apiClient.post<AuthResponse>('/auth/login/', {
+        email: email.toLowerCase(),
+        password,
+      })
+    } catch (err) {
+      // Surface the server's own wording (e.g. "Invalid email or password.")
+      // rather than a generic alert, so the form tells the user what to fix.
+      throw new Error(messageFromLoginError(err))
+    }
 
     const student = studentFromApi(data.user)
     const role = roleFromApi(data.user.role)
