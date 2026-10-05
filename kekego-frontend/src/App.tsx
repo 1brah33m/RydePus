@@ -44,8 +44,8 @@ function Landing() {
 
 /** Guard for student pages: authenticated drivers are bounced to the driver dashboard. */
 function Protected({ children }: { children: ReactNode }) {
-  const { status, role } = useAuth()
-  if (status === 'loading' || status === 'idle') {
+  const { status, role, sessionReady } = useAuth()
+  if (!sessionReady) {
     return (
       <div className="flex min-h-full items-center justify-center bg-ink-50 dark:bg-charcoal">
         <Spinner size="lg" label="Loading Rydepus" className="text-ink-900 dark:text-slate-100" />
@@ -63,8 +63,8 @@ function Protected({ children }: { children: ReactNode }) {
 
 /** Guard for the driver dashboard: students/unauthenticated are bounced away. */
 function DriverProtected({ children }: { children: ReactNode }) {
-  const { status, role } = useAuth()
-  if (status === 'loading' || status === 'idle') {
+  const { status, role, sessionReady } = useAuth()
+  if (!sessionReady) {
     return (
       <div className="flex min-h-full items-center justify-center bg-charcoal">
         <Spinner size="lg" label="Loading Rydepus" className="text-white" />
@@ -80,9 +80,16 @@ function DriverProtected({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * Guard for guest-only pages. Waits on the initial session check, but keeps the
+ * page mounted once that has resolved: submitting the login form sets status to
+ * "loading", and swapping in a spinner here would unmount the form and discard
+ * the in-flight submit along with the error it is about to receive. The form's
+ * own button shows the pending state instead.
+ */
 function GuestOnly({ children }: { children: ReactNode }) {
-  const { status, role } = useAuth()
-  if (status === 'loading' || status === 'idle') {
+  const { status, role, sessionReady } = useAuth()
+  if (!sessionReady) {
     return (
       <div className="flex min-h-full items-center justify-center bg-ink-50 dark:bg-charcoal">
         <Spinner size="lg" label="Loading Rydepus" className="text-ink-900 dark:text-slate-100" />

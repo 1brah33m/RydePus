@@ -7,6 +7,13 @@ type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
 
 interface AuthContextValue {
   status: AuthStatus
+  /**
+   * False only until the initial stored-session check has resolved. Guards use
+   * this to tell "we do not know who this is yet, show a spinner" apart from
+   * "a sign-in the user just submitted is in flight", where the form must stay
+   * mounted so its state and error message survive.
+   */
+  sessionReady: boolean
   student: Student | null
   role: UserRole | null
   login: (identifier: string, password: string) => Promise<void>
@@ -21,6 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading')
+  const [sessionReady, setSessionReady] = useState(false)
   const [student, setStudent] = useState<Student | null>(null)
   const [role, setRole] = useState<UserRole | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .getSession()
       .then((current) => {
         if (cancelled) return
+        setSessionReady(true)
         if (current) {
           setStudent(current)
           setRole(authService.getRole())
@@ -41,7 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {
-        if (!cancelled) setStatus('unauthenticated')
+        if (!cancelled) {
+          setSessionReady(true)
+          setStatus('unauthenticated')
+        }
       })
     return () => {
       cancelled = true
@@ -94,8 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [student])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, student, role, login, register, updateStudent, logout, error, clearError }),
-    [status, student, role, login, register, updateStudent, logout, error, clearError],
+    () => ({ status, sessionReady, student, role, login, register, updateStudent, logout, error, clearError }),
+    [status, sessionReady, student, role, login, register, updateStudent, logout, error, clearError],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
