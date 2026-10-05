@@ -26,6 +26,10 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "full_name",
+            "department",
+            "faculty",
+            "level",
+            "matric_number",
             "role",
             "registration_source",
             "created_at",
@@ -38,11 +42,24 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("first_name", "last_name", "phone_number")
+        fields = (
+            "first_name",
+            "last_name",
+            "phone_number",
+            "department",
+            "faculty",
+            "level",
+            "matric_number",
+        )
 
 
 def _clean_name_field(value: str) -> str:
     return " ".join(value.split())[:150]
+
+
+def _clean_text_field(value: str, max_length: int) -> str:
+    """Collapse whitespace and clamp to the column width, like names are."""
+    return " ".join(value.split())[:max_length]
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -98,6 +115,12 @@ class RegisterSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150, allow_blank=True, required=False)
     last_name = serializers.CharField(max_length=150, allow_blank=True, required=False)
     phone_number = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    #: Academic details. Optional, because a Google sign-up or a DRIVER
+    #: registration may not supply them.
+    department = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    faculty = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    level = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    matric_number = serializers.CharField(required=False, allow_blank=True, max_length=50)
     role = serializers.ChoiceField(choices=User.Role.choices)
     #: A Google ID token. When present the identity is verified server-side and
     #: the account is recorded as Google-linked.
@@ -164,6 +187,10 @@ class RegisterSerializer(serializers.Serializer):
         attrs["first_name"] = first_name
         attrs["last_name"] = last_name
         attrs["google_sub"] = google_sub
+        attrs["department"] = _clean_text_field(attrs.get("department") or "", 150)
+        attrs["faculty"] = _clean_text_field(attrs.get("faculty") or "", 150)
+        attrs["level"] = _clean_text_field(attrs.get("level") or "", 20)
+        attrs["matric_number"] = _clean_text_field(attrs.get("matric_number") or "", 50)
         return attrs
 
     def create(self, validated_data: dict) -> User:

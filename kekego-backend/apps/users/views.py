@@ -77,7 +77,9 @@ password_change_response = inline_serializer(
     "registration; callers cannot self-assign staff/superuser flags. A password "
     "is required and must be repeated in confirm_password. Names may be typed "
     "by the user, or auto-filled by sending google_id_token, in which case the "
-    "verified Google given_name/family_name are stored instead.",
+    "verified Google given_name/family_name are stored instead. The optional "
+    "academic fields department, faculty, level and matric_number are stored "
+    "when supplied.",
     request=RegisterSerializer,
     responses={
         201: AuthResponseSerializer,
@@ -185,7 +187,8 @@ class RefreshView(TokenRefreshView):
     ),
     patch=extend_schema(
         summary="Update the current user profile",
-        description="Updates the editable profile fields (names and phone). "
+        description="Updates the editable profile fields (names, phone, and the "
+        "academic details department, faculty, level and matric_number). "
         "Role is immutable through this endpoint.",
         request=UserProfileUpdateSerializer,
         responses={

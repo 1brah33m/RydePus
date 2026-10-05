@@ -791,6 +791,178 @@ def test_me_returns_current_user(student_client):
 
 
 @pytest.mark.django_db
+def test_register_stores_the_academic_fields(api_client):
+    """The academic details collected on the registration form must persist."""
+    payload = register_payload(
+        department="Crop Science",
+        faculty="Faculty of Environmental Sciences",
+        level="300",
+        matric_number="230241232",
+    )
+    response = api_client.post(REGISTER_URL, payload, format="json")
+
+    assert response.status_code == status.HTTP_201_CREATED
+    user_body = response.json()["user"]
+    assert user_body["department"] == "Crop Science"
+    assert user_body["faculty"] == "Faculty of Environmental Sciences"
+    assert user_body["level"] == "300"
+    assert user_body["matric_number"] == "230241232"
+
+    user = User.objects.get(email="newstudent@example.com")
+    assert user.department == "Crop Science"
+    assert user.faculty == "Faculty of Environmental Sciences"
+    assert user.level == "300"
+    assert user.matric_number == "230241232"
+
+
+@pytest.mark.django_db
+def test_register_without_academic_fields_leaves_them_blank(api_client):
+    """Google sign-ups and quick drivers omit them; the columns must default."""
+    response = api_client.post(REGISTER_URL, register_payload(), format="json")
+
+    assert response.status_code == status.HTTP_201_CREATED
+    user_body = response.json()["user"]
+    assert user_body["department"] == ""
+    assert user_body["faculty"] == ""
+    assert user_body["level"] == ""
+    assert user_body["matric_number"] == ""
+
+    user = User.objects.get(email="newstudent@example.com")
+    assert user.department == ""
+    assert user.faculty == ""
+    assert user.level == ""
+    assert user.matric_number == ""
+
+
+@pytest.mark.django_db
+def test_register_normalises_and_clamps_the_academic_fields(api_client):
+    response = api_client.post(
+        REGISTER_URL,
+        register_payload(
+            department="  Crop   Science  ",
+            faculty="Faculty  of\tEnvironmental Sciences",
+            level=" 300 ",
+            matric_number=" 230241232 ",
+        ),
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    user = User.objects.get(email="newstudent@example.com")
+    assert user.department == "Crop Science"
+    assert user.faculty == "Faculty of Environmental Sciences"
+    assert user.level == "300"
+    assert user.matric_number == "230241232"
+
+
+@pytest.mark.django_db
+def test_register_rejects_an_over_long_academic_field(api_client):
+    response = api_client.post(
+        REGISTER_URL,
+        register_payload(faculty="F" * 151),
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "faculty" in response.json()["errors"]
+
+
+@pytest.mark.django_db
+def test_login_returns_the_academic_fields(api_client, student_user):
+    student_user.department = "Zoology"
+    student_user.faculty = "Faculty of Science"
+    student_user.level = "400"
+    student_user.matric_number = "230241999"
+    student_user.save()
+
+    response = api_client.post(
+        LOGIN_URL,
+        {"email": student_user.email, "password": VALID_PASSWORD},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    user_body = response.json()["user"]
+    assert user_body["department"] == "Zoology"
+    assert user_body["faculty"] == "Faculty of Science"
+    assert user_body["level"] == "400"
+    assert user_body["matric_number"] == "230241999"
+
+
+@pytest.mark.django_db
+def test_me_returns_the_academic_fields(student_client, student_user):
+    student_user.department = "Crop Science"
+    student_user.level = "300"
+    student_user.save()
+
+    response = student_client.get(ME_URL)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["department"] == "Crop Science"
+    assert response.json()["faculty"] == ""
+    assert response.json()["level"] == "300"
+    assert response.json()["matric_number"] == ""
+
+
+@pytest.mark.django_db
+def test_me_updates_the_academic_fields(student_client, student_user):
+    """The Profile page edit form must be able to persist these."""
+    response = student_client.patch(
+        ME_URL,
+        {
+            "department": "Zoology",
+            "faculty": "Faculty of Science",
+            "level": "500",
+            "matric_number": "230241999",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["department"] == "Zoology"
+    assert body["faculty"] == "Faculty of Science"
+    assert body["level"] == "500"
+    assert body["matric_number"] == "230241999"
+
+    student_user.refresh_from_db()
+    assert student_user.department == "Zoology"
+    assert student_user.faculty == "Faculty of Science"
+    assert student_user.level == "500"
+    assert student_user.matric_number == "230241999"
+
+
+@pytest.mark.django_db
+def test_me_can_clear_the_academic_fields(student_client, student_user):
+    student_user.department = "Zoology"
+    student_user.faculty = "Faculty of Science"
+    student_user.level = "500"
+    student_user.save()
+
+    response = student_client.patch(
+        ME_URL,
+        {"department": "", "faculty": "", "level": ""},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    student_user.refresh_from_db()
+    assert student_user.department == ""
+    assert student_user.faculty == ""
+    assert student_user.level == ""
+    # Untouched by this request, so it must survive.
+    assert student_user.matric_number == ""
+
+
+@pytest.mark.django_db
+def test_me_patch_rejects_an_over_long_academic_field(student_client):
+    response = student_client.patch(ME_URL, {"level": "3" * 21}, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "level" in response.json()["errors"]
+
+
+@pytest.mark.django_db
 def test_me_updates_profile(student_client):
     response = student_client.patch(
         ME_URL,

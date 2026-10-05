@@ -20,9 +20,9 @@ export type { VerifiedGoogleIdentity }
  * Adapter notes:
  * - The backend authenticates with email only. The frontend previously
  *   accepted a phone number; phone login is not supported by the API.
- * - The backend User has no department/faculty/level fields, so those student
- *   profile fields are kept on the client only and reset to "" after a fresh
- *   login until the backend grows them.
+ * - The academic fields department/faculty/level/matric_number are stored on
+ *   the backend User and round-trip through every auth response, so they are
+ *   read straight off the API payload rather than cached in the browser.
  * - Roles are uppercase on the backend (STUDENT / DRIVER) and lowercase in the
  *   frontend (student / driver).
  * - Registration requires first name, last name, a password and its
@@ -43,6 +43,10 @@ interface ApiUser {
   first_name: string
   last_name: string
   full_name: string
+  department: string
+  faculty: string
+  level: string
+  matric_number: string
   role: 'STUDENT' | 'DRIVER'
 }
 
@@ -56,15 +60,23 @@ function roleFromApi(role: ApiUser['role']): UserRole {
   return role === 'DRIVER' ? 'driver' : 'student'
 }
 
+/**
+ * Build a Student from an API user.
+ *
+ * Every entry point funnels through here - login, registration and the
+ * bootstrap session check - so mapping the API's snake_case fields here is
+ * enough for the profile page to stay populated across reloads.
+ */
 function studentFromApi(user: ApiUser): Student {
   return {
     id: String(user.id),
     fullName: user.full_name,
-    department: '',
-    faculty: '',
-    level: '',
+    department: user.department ?? '',
+    faculty: user.faculty ?? '',
+    level: user.level ?? '',
     phone: user.phone_number ?? '',
     email: user.email,
+    ...(user.matric_number ? { matricNumber: user.matric_number } : {}),
   }
 }
 
@@ -192,6 +204,10 @@ function buildRegisterBody(payload: RegisterPayload, role: UserRole): Record<str
     last_name: payload.lastName.trim(),
   }
   if (payload.phone?.trim()) body.phone_number = payload.phone.trim()
+  if (payload.department?.trim()) body.department = payload.department.trim()
+  if (payload.faculty?.trim()) body.faculty = payload.faculty.trim()
+  if (payload.level) body.level = String(payload.level)
+  if (payload.matricNumber?.trim()) body.matric_number = payload.matricNumber.trim()
   if (payload.googleIdToken) body.google_id_token = payload.googleIdToken
   return body
 }
@@ -267,7 +283,15 @@ export class AuthService {
 
   /** Update profile fields the backend supports (name and phone). */
   async updateProfile(_studentId: string, updates: Partial<Student>): Promise<Student> {
-    const body: { first_name?: string; last_name?: string; phone_number?: string } = {}
+    const body: {
+      first_name?: string
+      last_name?: string
+      phone_number?: string
+      department?: string
+      faculty?: string
+      level?: string
+      matric_number?: string
+    } = {}
     if (updates.fullName !== undefined) {
       const names = splitFullName(updates.fullName)
       body.first_name = names.first_name
@@ -276,23 +300,25 @@ export class AuthService {
     if (updates.phone !== undefined) {
       body.phone_number = updates.phone.trim()
     }
+    if (updates.department !== undefined) {
+      body.department = updates.department.trim()
+    }
+    if (updates.faculty !== undefined) {
+      body.faculty = updates.faculty.trim()
+    }
+    if (updates.level !== undefined) {
+      body.level = String(updates.level)
+    }
+    if (updates.matricNumber !== undefined) {
+      body.matric_number = updates.matricNumber.trim()
+    }
 
     const user = await apiClient.patch<ApiUser>('/auth/me/', body, { auth: true })
-    const previous = readSession()?.student
-    const serverFields = studentFromApi(user)
-
-    // The backend has no department/faculty/level, so keep the values the user
-    // just submitted (or their previous client-side values) rather than wiping them.
-    const merged: Student = {
-      ...previous,
-      ...serverFields,
-      id: String(user.id),
-      department: updates.department ?? previous?.department ?? serverFields.department,
-      faculty: updates.faculty ?? previous?.faculty ?? serverFields.faculty,
-      level: updates.level ?? previous?.level ?? serverFields.level,
-    }
-    saveSession(merged, roleFromApi(user.role))
-    return merged
+    // The API echoes the stored values back, so the response is authoritative;
+    // no local merge is needed.
+    const student = studentFromApi(user)
+    saveSession(student, roleFromApi(user.role))
+    return student
   }
 
   /** Change the signed-in user's password on the API. */

@@ -91,7 +91,7 @@ export function Profile() {
   const rows = [
     { icon: BookOpen, label: 'Department', value: student.department },
     { icon: Building2, label: 'Faculty', value: student.faculty },
-    { icon: GraduationCap, label: 'Level', value: `${student.level} Level` },
+    { icon: GraduationCap, label: 'Level', value: student.level ? `${student.level} Level` : '' },
     { icon: Mail, label: 'Email', value: student.email },
     { icon: Phone, label: 'Phone', value: student.phone },
   ]
@@ -115,7 +115,9 @@ export function Profile() {
         <div className="min-w-0 flex-1">
           <h1 className="break-words text-lg font-bold leading-snug text-ink-900 dark:text-slate-100">{student.fullName}</h1>
           <p className="mt-0.5 break-words text-sm leading-relaxed text-ink-500 dark:text-slate-400">
-            {student.faculty ? `${student.faculty} · ${student.level} Level` : 'Student account'}
+            {student.faculty
+              ? [student.faculty, student.level && `${student.level} Level`].filter(Boolean).join(' · ')
+              : 'Student account'}
           </p>
         </div>
       </header>

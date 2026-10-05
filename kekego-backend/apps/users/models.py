@@ -26,6 +26,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(max_length=20, blank=True, default="")
     first_name = models.CharField(max_length=150, blank=True, default="")
     last_name = models.CharField(max_length=150, blank=True, default="")
+    #: Academic details captured at registration. Optional because a Google
+    #: sign-up may skip the academic step, and a driver has none of these.
+    department = models.CharField(max_length=150, blank=True, default="")
+    faculty = models.CharField(max_length=150, blank=True, default="")
+    level = models.CharField(max_length=20, blank=True, default="")
+    matric_number = models.CharField(max_length=50, blank=True, default="")
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STUDENT)
     registration_source = models.CharField(
         max_length=10,
