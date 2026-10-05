@@ -28,7 +28,7 @@ export function Login() {
   // GuestOnly swaps this form out for a spinner while auth status is "loading",
   // which unmounts it and throws away `formError` before the failure comes back.
   // AuthContext.error lives above that unmount, so prefer it whenever set.
-  const shownError = formError ?? authError
+  const displayedError = formError ?? authError
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -87,8 +87,8 @@ export function Login() {
           error={errors.password ?? undefined}
         />
 
-        {shownError && (
-          <Alert tone="error-dark">{shownError}</Alert>
+        {displayedError && (
+          <Alert tone="error-dark">{displayedError}</Alert>
         )}
 
         <Button
