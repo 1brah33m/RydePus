@@ -16,7 +16,7 @@ interface Validation {
 }
 
 export function Login() {
-  const { login } = useAuth()
+  const { login, error: authError, clearError } = useAuth()
   const navigate = useNavigate()
 
   const [identifier, setIdentifier] = useState('')
@@ -24,6 +24,11 @@ export function Login() {
   const [errors, setErrors] = useState<Validation>({ identifier: null, password: null })
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  // GuestOnly swaps this form out for a spinner while auth status is "loading",
+  // which unmounts it and throws away `formError` before the failure comes back.
+  // AuthContext.error lives above that unmount, so prefer it whenever set.
+  const shownError = formError ?? authError
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -35,6 +40,7 @@ export function Login() {
 
     setBusy(true)
     setFormError(null)
+    clearError()
     try {
       await login(identifier, password)
       navigate(homePathForRole(authService.getRole()), { replace: true })
@@ -52,6 +58,7 @@ export function Login() {
     setPassword('')
     setErrors({ identifier: null, password: null })
     setFormError(null)
+    clearError()
   }
 
   return (
@@ -80,8 +87,8 @@ export function Login() {
           error={errors.password ?? undefined}
         />
 
-        {formError && (
-          <Alert tone="error-dark">{formError}</Alert>
+        {shownError && (
+          <Alert tone="error-dark">{shownError}</Alert>
         )}
 
         <Button
