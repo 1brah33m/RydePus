@@ -14,6 +14,7 @@ import { groupService } from '../services/groupService'
 import { tripService } from '../services/tripService'
 import { paymentService } from '../services/paymentService'
 import { perSeatFare } from '../config/pricing'
+import { decideDispatch } from '../utils/dispatch'
 import { useAuth } from './AuthContext'
 
 /**
@@ -105,6 +106,19 @@ function deriveSelection(
     )
     activeTripId = openTrip?.id ?? null
   }
+
+  // Nothing in flight. Keep the most recent completed trip of mine selected
+  // until it has been rated, so finishing a ride leaves the student on the
+  // completion screen rather than dropping them back into the create-a-group
+  // flow with no sign the ride ever happened. Unrated is the stopping
+  // condition, which also lets settleActivity's dismissal stick.
+  if (!activeTripId) {
+    const myGroupIds = new Set(groups.filter(isMember).map((g) => g.id))
+    const finished = trips
+      .filter((t) => t.status === 'COMPLETED' && !t.rating && t.groupId && myGroupIds.has(t.groupId))
+      .sort((a, b) => (b.completedAt ?? b.requestedAt).localeCompare(a.completedAt ?? a.requestedAt))
+    activeTripId = finished[0]?.id ?? null
+  }
   return { activeGroupId, activeTripId }
 }
 
@@ -149,14 +163,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /**
    * Send a group's ride request to the driver queue, but only once all four
    * seats are accounted for by members or by a buyout. Safe to call
-   * repeatedly: an existing trip is reused, and the backend rejects duplicates.
+   * repeatedly: an existing trip is reused, and see decideDispatch for why a
+   * group that already rode is left alone.
    */
   const dispatchGroup = useCallback(async (group: Group, knownTrips: Trip[]): Promise<Trip | null> => {
-    if (!group.isDispatchable) return null
-    const existing = knownTrips.find(
-      (t) => t.groupId === group.id && t.status !== 'COMPLETED' && t.status !== 'CANCELLED',
-    )
-    if (existing) return existing
+    const decision = decideDispatch(group, knownTrips)
+    if (decision.kind === 'skip') return null
+    if (decision.kind === 'reuse') return decision.trip
 
     try {
       return await tripService.createTrip({
