@@ -16,22 +16,15 @@ import { DarkField, DarkSelect } from '../../components/ui/DarkField'
 import { AuthLayout } from './AuthLayout'
 import { GoogleIcon, NameAndPasswordFields } from './sharedAuth'
 
-const LEVELS = [100, 200, 300, 400, 500, 600, 700].map((n) => ({
+const LEVELS = [100, 200, 300, 400, 500].map((n) => ({
   value: String(n),
   label: `${n}L`,
 }))
 
 const FACULTIES = [
   'Faculty of Engineering',
-  'Faculty of Science',
-  'Faculty of Management Sciences',
-  'Faculty of Arts',
-  'Faculty of Education',
-  'Faculty of Law',
-  'Faculty of Social Sciences',
   'Faculty of Environmental Sciences',
-  'Faculty of Medicine',
-  'Faculty of Agriculture',
+  'School of Agriculture',
 ].map((f) => ({ value: f, label: f }))
 
 type Step = 'email' | 'profile' | 'verifying'
@@ -305,7 +298,7 @@ export function Register() {
           type="email"
           inputMode="email"
           autoComplete="email"
-          placeholder="you@campus.edu.ng"
+          placeholder="youremail@gmail.com"
           value={form.email ?? ''}
           onChange={(e) => setField('email', e.target.value)}
           error={errors.email}
@@ -349,7 +342,7 @@ export function Register() {
           />
           <DarkField
             label="Matric number"
-            placeholder="CU2021/34567"
+            placeholder="230241232"
             value={form.matricNumber ?? ''}
             onChange={(e) => setField('matricNumber', e.target.value)}
             error={errors.matricNumber}
