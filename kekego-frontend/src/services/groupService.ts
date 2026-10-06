@@ -1,6 +1,6 @@
 import type { CampusLocation, Group, GroupMember, GroupStatus } from '../types'
 import { coordsFor, findLocation } from '../config/locations'
-import { CURRENCY, GROUP_SEATS } from '../config/pricing'
+import { CURRENCY, GROUP_SEATS, perSeatFare } from '../config/pricing'
 import { apiClient } from './apiClient'
 
 /**
@@ -102,11 +102,16 @@ export class GroupService {
    * Create a new group; the creator becomes its first member.
    *
    * Coordinates are sent so the backend can price the route itself — without
-   * them it would fall back to the flat minimum fare.
+   * them it would fall back to the flat minimum fare. The chosen seat count and
+   * its total (seats x per-seat fare) travel with the request so the backend
+   * can create and settle the creator's seats in one step; the server remains
+   * the source of truth and may reprice.
    */
   async createGroup(input: CreateGroupInput, currentMemberId?: string): Promise<Group> {
     const pickup = coordsFor(input.pickup.id)
     const destination = coordsFor(input.destination.id)
+    const seats = Math.max(1, Math.min(GROUP_SEATS, Math.trunc(input.seats ?? 1)))
+    const amount = perSeatFare(input.pickup.id, input.destination.id) * seats
 
     const api = await apiClient.post<ApiGroup>(
       '/groups/',
@@ -123,6 +128,9 @@ export class GroupService {
             }
           : {}),
         capacity: GROUP_SEATS,
+        seats,
+        amount,
+        currency: CURRENCY,
       },
       { auth: true },
     )
@@ -138,11 +146,17 @@ export class GroupService {
   /**
    * Pay for a number of the group's empty seats.
    *
-   * No amount is sent: the backend prices the seats from the group's own
-   * coordinates, so the client cannot influence what is charged.
+   * The backend prices the seats from the group's own coordinates and treats
+   * the server price as authoritative. `amount` is sent for compatibility with
+   * endpoints that validate it up front (it is `seats x per-seat fare`); a
+   * server that reprices simply ignores it.
    */
-  async buyOutSeats(groupId: string, seats: number): Promise<void> {
-    await apiClient.post(`/groups/${groupId}/buyout/`, { seats, currency: CURRENCY }, { auth: true })
+  async buyOutSeats(groupId: string, seats: number, amount?: number): Promise<void> {
+    await apiClient.post(
+      `/groups/${groupId}/buyout/`,
+      { seats, currency: CURRENCY, ...(amount !== undefined ? { amount } : {}) },
+      { auth: true },
+    )
   }
 
   /** Leave a group while keeping it alive for the remaining passengers. */

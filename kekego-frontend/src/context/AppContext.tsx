@@ -13,7 +13,7 @@ import type {
 import { groupService } from '../services/groupService'
 import { tripService } from '../services/tripService'
 import { paymentService } from '../services/paymentService'
-import { GROUP_SEATS } from '../config/pricing'
+import { GROUP_SEATS, perSeatFare } from '../config/pricing'
 import { decideDispatch } from '../utils/dispatch'
 import { useAuth } from './AuthContext'
 
@@ -276,8 +276,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       writeActiveRaw(group.id, null)
 
       if (wanted > 1) {
-        // The creator's own membership already holds one seat.
-        await groupService.buyOutSeats(group.id, wanted - 1)
+        // The creator's own membership already holds one seat, so only the
+        // extras are bought. Prefer the server's per-seat price; fall back to
+        // the shared pricing table when talking to a server that does not
+        // expose it yet.
+        const perSeat = group.farePerSeat > 0 ? group.farePerSeat : perSeatFare(pickup.id, destination.id)
+        const extra = wanted - 1
+        await groupService.buyOutSeats(group.id, extra, perSeat * extra)
       }
 
       await refresh()
@@ -351,10 +356,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error(`Choose between 1 and ${remaining} seat(s).`)
       }
 
-      // Displayed from the server's price so the number shown is the number
-      // charged; the API call below sends no amount at all.
-      const amount = group.farePerSeat * wanted
-      await groupService.buyOutSeats(group.id, wanted)
+      // Displayed and submitted from the server's price when it is available;
+      // otherwise fall back to the shared pricing table. The server still
+      // reprices, so this figure only mirrors what will be charged.
+      const perSeat =
+        group.farePerSeat > 0 ? group.farePerSeat : perSeatFare(group.pickup.id, group.destination.id)
+      const amount = perSeat * wanted
+      await groupService.buyOutSeats(group.id, wanted, amount)
 
       const updated = await groupService.getGroups(currentMemberId)
       const fresh = updated.find((g) => g.id === groupId)
@@ -362,7 +370,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await dispatchGroup(fresh, state.trips)
       }
       await refresh()
-      return fresh ? fresh.farePerSeat * wanted : amount
+      return perSeat * wanted
     },
     [requireStudent, state.groups, state.trips, currentMemberId, refresh, dispatchGroup],
   )

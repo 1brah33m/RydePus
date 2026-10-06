@@ -82,6 +82,11 @@ def make_group(token, tag, seats_note=""):
             "destination_lat": DEST["lat"],
             "destination_lng": DEST["lng"],
             "capacity": 4,
+            # The frontend now sends these for parity with endpoints that
+            # require them up front; a repricing server must ignore them.
+            "seats": 1,
+            "amount": 150,
+            "currency": "NGN",
         },
         token=token,
     )
