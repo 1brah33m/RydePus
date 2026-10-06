@@ -44,6 +44,7 @@ export interface ApiGroup {
    */
   fare_per_seat?: string | null
   fare_total?: string | null
+  own_seat_paid?: boolean
   created_by: number
   created_by_name: string
   members: ApiGroupMember[]
@@ -99,6 +100,7 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
     remainingSeats: api.remaining_seats ?? Math.max(0, api.capacity - seatsFilled),
     farePerSeat,
     fareTotal,
+    ownSeatPaid: api.own_seat_paid ?? false,
     isDispatchable: members.length + boughtSeats >= api.capacity,
   }
 }

@@ -123,13 +123,18 @@ def main():
         token=s_token,
     )
     check("underquoted buyout still accepted at server price", status == 201, status)
-    check("2 seats cost 2 x fare_per_seat", abs(float(buy["amount"]) - per_seat * 2) < 0.01, buy.get("amount"))
+    check(
+        "2 empty seats + own seat cost 3 x fare_per_seat",
+        abs(float(buy["amount"]) - per_seat * 3) < 0.01,
+        buy.get("amount"),
+    )
     check("buyout settles immediately", buy["status"] == "SUCCESSFUL", buy.get("status"))
     check("buyout awaits nothing", buy["awaiting_confirmation"] is False)
 
     status, bought = call("GET", "/groups/", token=s_token)
     g = next(x for x in bought if x["id"] == group["id"])
     check("partial buyout leaves a seat open", g["remaining_seats"] == 1, g.get("remaining_seats"))
+    check("own seat is now paid", g["own_seat_paid"] is True, g.get("own_seat_paid"))
 
     print("\nOut-of-range seat counts are refused")
     status, _ = call("POST", f"/groups/{group['id']}/buyout/", {"seats": 4}, token=s_token)

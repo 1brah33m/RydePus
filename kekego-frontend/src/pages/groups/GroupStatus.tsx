@@ -69,7 +69,10 @@ export function GroupStatus() {
   const matched = isGroupCancellationLocked(group.status)
   // Server-priced, so the number shown here is the number that gets charged.
   const perSeat = group.farePerSeat
-  const buyOutTotal = perSeat * waiting
+  // A buyout is one consolidated charge for the whole share: the student's own
+  // seat (billed once, while it is still unpaid) plus the empty seats filled.
+  const ownSeatDue = group.ownSeatPaid ? 0 : 1
+  const buyOutTotal = perSeat * (waiting + ownSeatDue)
 
   const handleCancel = async () => {
     setBusy(true)
@@ -217,8 +220,10 @@ export function GroupStatus() {
 
       <Modal open={buyOutOpen} onClose={() => setBuyOutOpen(false)} title="Fill the empty seats">
         <p className="text-sm leading-relaxed text-ink-600 dark:text-slate-300">
-          Pay for the empty seats yourself. Fill all {waiting} to leave right away, or take just the
-          number you need and leave the rest open for other passengers.
+          Pay for the whole ride in one go. Fill all {waiting} empty seat{waiting === 1 ? '' : 's'} to
+          leave right away, or take just the number you need and leave the rest open for other
+          passengers.{' '}
+          {ownSeatDue === 1 && 'The total includes your own seat, charged only once.'}
         </p>
 
         <div className="mt-4">
@@ -254,16 +259,22 @@ export function GroupStatus() {
             <dd className="font-semibold text-ink-800 dark:text-slate-200">{formatCurrency(perSeat)}</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt className="text-ink-500 dark:text-slate-400">Seats paid for</dt>
+            <dt className="text-ink-500 dark:text-slate-400">Empty seats to fill</dt>
             <dd className="flex items-center gap-1.5 font-semibold text-ink-800 dark:text-slate-200">
               <Armchair aria-hidden className="size-4" />
               {buyOutSeats || waiting}
             </dd>
           </div>
+          {ownSeatDue === 1 && (
+            <div className="flex items-center justify-between">
+              <dt className="text-ink-500 dark:text-slate-400">Your own seat (one-off)</dt>
+              <dd className="font-semibold text-ink-800 dark:text-slate-200">{formatCurrency(perSeat)}</dd>
+            </div>
+          )}
           <div className="flex items-center justify-between border-t border-ink-100 pt-2 dark:border-white/10">
-            <dt className="font-semibold text-ink-800 dark:text-slate-200">Total</dt>
+            <dt className="font-semibold text-ink-800 dark:text-slate-200">Total for the ride</dt>
             <dd className="text-lg font-bold text-brand-700 dark:text-brand-300">
-              {formatCurrency(perSeat * (buyOutSeats || waiting))}
+              {formatCurrency(perSeat * ((buyOutSeats || waiting) + ownSeatDue))}
             </dd>
           </div>
         </dl>
@@ -271,7 +282,7 @@ export function GroupStatus() {
         <div className="mt-5 flex flex-col gap-2.5">
           <Button size="lg" fullWidth loading={buying} onClick={handleBuyOut}>
             <CreditCard aria-hidden className="size-4" />
-            Pay {formatCurrency(perSeat * (buyOutSeats || waiting))}
+            Pay {formatCurrency(perSeat * ((buyOutSeats || waiting) + ownSeatDue))}
           </Button>
           <Button size="lg" fullWidth variant="outline" onClick={() => setBuyOutOpen(false)}>
             Not now

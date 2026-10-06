@@ -330,8 +330,9 @@ def test_group_buyout_is_priced_by_the_server_and_settles_immediately(student_us
     assert body["kind"] == "GROUP_BUYOUT"
     assert body["status"] == "SUCCESSFUL"
     assert body["awaiting_confirmation"] is False
-    # 3 seats x the server's per-seat price, not anything the client sent.
-    assert body["amount"] == f"{group.fare_per_seat * 3:.2f}"
+    # One consolidated charge: the 3 empty seats plus the student's own seat,
+    # priced by the server and not by anything the client sent.
+    assert body["amount"] == f"{group.fare_per_seat * 4:.2f}"
     assert group.member_count == 1
 
 
@@ -353,7 +354,7 @@ def test_group_buyout_ignores_a_underquoted_client_amount(student_user, student_
     )
 
     assert response.status_code == status.HTTP_201_CREATED
-    assert response.json()["amount"] == f"{group.fare_per_seat * 3:.2f}"
+    assert response.json()["amount"] == f"{group.fare_per_seat * 4:.2f}"
 
 
 @pytest.mark.django_db
@@ -375,7 +376,8 @@ def test_group_buyout_can_take_some_but_not_all_seats(student_user, student_clie
     )
 
     assert response.status_code == status.HTTP_201_CREATED
-    assert response.json()["amount"] == f"{group.fare_per_seat * 2:.2f}"
+    # 2 empty seats plus the buyer's own seat, in one charge.
+    assert response.json()["amount"] == f"{group.fare_per_seat * 3:.2f}"
 
     group.refresh_from_db()
     assert group.bought_seats == 2
@@ -419,10 +421,12 @@ def test_group_buyout_can_be_topped_up_in_steps(student_user, student_client):
 
     first = student_client.post(url, {"seats": 2, "currency": "NGN"}, format="json")
     assert first.status_code == status.HTTP_201_CREATED
-    assert first.json()["amount"] == f"{group.fare_per_seat * 2:.2f}"
+    # 2 empty seats plus the buyer's own seat (charged on the first buyout).
+    assert first.json()["amount"] == f"{group.fare_per_seat * 3:.2f}"
 
     second = student_client.post(url, {"seats": 1, "currency": "NGN"}, format="json")
     assert second.status_code == status.HTTP_201_CREATED
+    # The own seat is already covered, so only the extra seat is billed.
     assert second.json()["amount"] == f"{group.fare_per_seat:.2f}"
 
     group.refresh_from_db()
@@ -437,7 +441,7 @@ def test_group_buyout_can_be_topped_up_in_steps(student_user, student_client):
 
 @pytest.mark.django_db
 def test_group_buyout_prices_each_payment_separately(student_user, student_client):
-    """Two buyouts for different seat counts must not double-charge."""
+    """Two buyouts across the ride must not double-charge the student's own seat."""
     group = Group.objects.create(
         name="Split Buyout",
         pickup_location="Gate",
@@ -452,7 +456,8 @@ def test_group_buyout_prices_each_payment_separately(student_user, student_clien
     student_client.post(url, {"seats": 2, "currency": "NGN"}, format="json")
 
     assert Payment.objects.filter(group=group).count() == 2
-    assert sum(p.amount for p in Payment.objects.filter(group=group)) == group.fare_per_seat * 3
+    # Own seat + 1 seat + 2 seats = the whole 4-seat ride, billed once each.
+    assert sum(p.amount for p in Payment.objects.filter(group=group)) == group.fare_per_seat * 4
 
 
 @pytest.mark.django_db
@@ -474,3 +479,24 @@ def test_group_api_exposes_the_authoritative_fares(student_user, student_client)
     assert body["fare_per_seat"] == f"{group.fare_per_seat:.2f}"
     assert body["fare_total"] == f"{group.fare_per_seat * 4:.2f}"
     assert body["remaining_seats"] == 3
+
+
+@pytest.mark.django_db
+def test_group_api_reports_whether_the_member_paid_their_own_seat(student_user, student_client):
+    """The buyout quote relies on this flag, so it must flip after the first buyout."""
+    group = Group.objects.create(
+        name="Own Seat Flag",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+        **ROUTE,
+    )
+
+    before = next(item for item in student_client.get("/api/v1/groups/").json() if item["id"] == group.id)
+    assert before["own_seat_paid"] is False
+
+    student_client.post(f"/api/v1/groups/{group.id}/buyout/", {"seats": 2, "currency": "NGN"}, format="json")
+
+    after = next(item for item in student_client.get("/api/v1/groups/").json() if item["id"] == group.id)
+    assert after["own_seat_paid"] is True

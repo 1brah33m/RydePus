@@ -277,12 +277,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (wanted > 1) {
         // The creator's own membership already holds one seat, so only the
-        // extras are bought. Prefer the server's per-seat price; fall back to
-        // the shared pricing table when talking to a server that does not
-        // expose it yet.
+        // extras are bought. The buyout is one consolidated amount covering the
+        // creator's own seat plus those extras — (wanted - 1) + 1 = wanted
+        // seats. Prefer the server's per-seat price; fall back to the shared
+        // pricing table when talking to a server that does not expose it yet.
         const perSeat = group.farePerSeat > 0 ? group.farePerSeat : perSeatFare(pickup.id, destination.id)
         const extra = wanted - 1
-        await groupService.buyOutSeats(group.id, extra, perSeat * extra)
+        await groupService.buyOutSeats(group.id, extra, perSeat * wanted)
       }
 
       await refresh()
@@ -356,12 +357,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error(`Choose between 1 and ${remaining} seat(s).`)
       }
 
-      // Displayed and submitted from the server's price when it is available;
-      // otherwise fall back to the shared pricing table. The server still
-      // reprices, so this figure only mirrors what will be charged.
+      // A buyout is one consolidated amount for the whole share: the student's
+      // own seat (billed once) plus the empty seats they are filling. Displayed
+      // and submitted from the server's price when available; otherwise fall
+      // back to the shared pricing table. The server still reprices, so this
+      // figure only mirrors what will be charged.
       const perSeat =
         group.farePerSeat > 0 ? group.farePerSeat : perSeatFare(group.pickup.id, group.destination.id)
-      const amount = perSeat * wanted
+      const chargedSeats = wanted + (group.ownSeatPaid ? 0 : 1)
+      const amount = perSeat * chargedSeats
       await groupService.buyOutSeats(group.id, wanted, amount)
 
       const updated = await groupService.getGroups(currentMemberId)
@@ -370,7 +374,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await dispatchGroup(fresh, state.trips)
       }
       await refresh()
-      return perSeat * wanted
+      return amount
     },
     [requireStudent, state.groups, state.trips, currentMemberId, refresh, dispatchGroup],
   )

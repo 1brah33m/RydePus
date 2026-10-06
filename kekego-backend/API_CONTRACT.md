@@ -106,11 +106,18 @@ Throttle rates are set server-side via env (`DRF_THROTTLE_ANON`,
   existing `PENDING` rows so they were not stranded.
 - Amounts are always computed and checked server-side:
   - Trip payments must equal `seats * trip.fare` (default `seats = 1`).
-  - Buyout amounts are computed from the group's own coordinates
-    (`seats * fare_per_seat`); client-supplied amounts are ignored entirely.
+  - Buyout amounts are computed from the group's own coordinates; client-supplied
+    amounts are ignored entirely. A buyout is one consolidated charge for the
+    whole share: the student's own seat plus the empty seats they are filling.
+    The own seat is billed only on the student's first buyout in a group, so a
+    later top-up charges only the extra seats. `seats` on the payment still
+    records the empty seats covered; the amount uses
+    `(seats + own_seat_due) * fare_per_seat`.
 - Fares come from `apps.core.pricing`, driven by `BASE_FARE`,
   `FARE_RATE_PER_KM`, `MIN_SEAT_FARE` and `FARE_ROUNDING`. Groups expose the
-  authoritative `fare_per_seat`, `fare_total` and `remaining_seats`.
+  authoritative `fare_per_seat`, `fare_total`, `remaining_seats` and the
+  per-user `own_seat_paid` flag (true once the requesting member's own seat has
+  been covered by a buyout).
 - A buyout may take any number of a group's empty seats (`1..remaining`).
   Taking all of them makes the group dispatchable; taking fewer leaves those
   seats open for other passengers.

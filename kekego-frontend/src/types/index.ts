@@ -160,6 +160,11 @@ export interface Group {
   farePerSeat: number
   /** The full-ride total: farePerSeat * maxSize. */
   fareTotal: number
+  /**
+   * True when the signed-in member has already paid for their own seat through a
+   * buyout, so a further buyout only bills the extra empty seats.
+   */
+  ownSeatPaid: boolean
   /** True when the group may be dispatched to drivers (4/4, or bought out). */
   isDispatchable: boolean
 }
