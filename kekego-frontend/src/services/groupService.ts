@@ -35,12 +35,15 @@ export interface ApiGroup {
   capacity: number
   status: 'WAITING' | 'FULL'
   member_count: number
-  bought_seats: number
-  seats_filled: number
-  remaining_seats: number
-  /** Server-priced fares; the UI must not recompute these. */
-  fare_per_seat: string
-  fare_total: string
+  bought_seats?: number
+  seats_filled?: number
+  remaining_seats?: number
+  /**
+   * Server-priced fares. Optional because older servers do not expose them;
+   * ``mapGroup`` falls back to the shared pricing table when they are absent.
+   */
+  fare_per_seat?: string | null
+  fare_total?: string | null
   created_by: number
   created_by_name: string
   members: ApiGroupMember[]
@@ -70,12 +73,22 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
   const status: GroupStatus = api.status === 'FULL' ? 'FULL' : 'WAITING'
   const seatsFilled = Math.min(api.capacity, api.seats_filled ?? members.length)
   const boughtSeats = api.bought_seats ?? 0
+  const pickup = findLocation(api.pickup_location)
+  const destination = findLocation(api.destination)
+
+  // Server-authoritative when the backend prices the route, but older servers
+  // do not expose a fare at all. Falling back to the shared pricing table keeps
+  // the queue working (a trip is rejected when its fare is not positive) and
+  // keeps every screen from rendering ₦0.
+  const serverPerSeat = Number(api.fare_per_seat ?? 0)
+  const farePerSeat = serverPerSeat > 0 ? serverPerSeat : perSeatFare(pickup.id, destination.id)
+  const fareTotal = Number(api.fare_total ?? 0) || farePerSeat * api.capacity
 
   return {
     id: String(api.id),
     code: api.name,
-    pickup: findLocation(api.pickup_location),
-    destination: findLocation(api.destination),
+    pickup,
+    destination,
     members,
     maxSize: api.capacity,
     status,
@@ -84,9 +97,8 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
     boughtSeats,
     seatsFilled,
     remainingSeats: api.remaining_seats ?? Math.max(0, api.capacity - seatsFilled),
-    // Server-authoritative, so every screen shows the same number.
-    farePerSeat: Number(api.fare_per_seat ?? 0),
-    fareTotal: Number(api.fare_total ?? 0),
+    farePerSeat,
+    fareTotal,
     isDispatchable: members.length + boughtSeats >= api.capacity,
   }
 }
