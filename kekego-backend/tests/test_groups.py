@@ -250,8 +250,11 @@ def test_buyout_fills_remaining_seats_and_makes_group_dispatchable(student_user,
 
 
 @pytest.mark.django_db
-def test_buyout_is_rejected_for_anything_other_than_all_remaining_seats(student_user, student_client):
-    """A partial buyout would leave the group under 4/4, so it is refused."""
+@pytest.mark.parametrize("seats", [0, -1, 3, 99])
+def test_buyout_is_rejected_for_a_seat_count_outside_the_empty_range(
+    student_user, student_client, seats
+):
+    """A student may take any of the empty seats, but never more than exist."""
     group = Group.objects.create(
         name="Partial Buyout",
         pickup_location="Gate",
@@ -268,10 +271,11 @@ def test_buyout_is_rejected_for_anything_other_than_all_remaining_seats(student_
         ),
     )
     group.refresh_status()
+    assert group.seats_filled == 2  # 2 empty seats available
 
     response = student_client.post(
         f"{GROUPS_URL}{group.id}/buyout/",
-        {"seats": 1, "amount": 200, "currency": "NGN"},
+        {"seats": seats, "currency": "NGN"},
         format="json",
     )
 

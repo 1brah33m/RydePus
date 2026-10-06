@@ -268,9 +268,17 @@ CORS_ALLOWED_ORIGINS = [o.strip() for o in env("DJANGO_CORS_ALLOWED_ORIGINS", de
 PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="manual")
 PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
 PAYSTACK_WEBHOOK_SECRET = env("PAYSTACK_WEBHOOK_SECRET", default="")
-# Server-side unit price used to price group buyouts. Buyout amounts are never
-# accepted from the client; a zero value disables buyouts until configured.
-GROUP_SEAT_FARE = env.float("GROUP_SEAT_FARE", default=0)
+
+# ---------------------------------------------------------------------------
+# Fare calculation
+# ---------------------------------------------------------------------------
+# These drive ``apps.core.pricing`` and are the authoritative per-seat price.
+# The client is never trusted to supply a fare: it multiplies these for display
+# only. Changing a value here reprices every group and trip immediately.
+BASE_FARE = env.float("BASE_FARE", default=100)
+FARE_RATE_PER_KM = env.float("FARE_RATE_PER_KM", default=120)
+MIN_SEAT_FARE = env.float("MIN_SEAT_FARE", default=150)
+FARE_ROUNDING = env.float("FARE_ROUNDING", default=50)
 
 # ---------------------------------------------------------------------------
 # API documentation (schema/Swagger/Redoc). Off by default in production.

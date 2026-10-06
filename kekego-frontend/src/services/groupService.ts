@@ -1,5 +1,5 @@
 import type { CampusLocation, Group, GroupMember, GroupStatus } from '../types'
-import { findLocation } from '../config/locations'
+import { coordsFor, findLocation } from '../config/locations'
 import { CURRENCY, GROUP_SEATS } from '../config/pricing'
 import { apiClient } from './apiClient'
 
@@ -28,11 +28,19 @@ export interface ApiGroup {
   name: string
   pickup_location: string
   destination: string
+  pickup_lat: string | null
+  pickup_lng: string | null
+  destination_lat: string | null
+  destination_lng: string | null
   capacity: number
   status: 'WAITING' | 'FULL'
   member_count: number
   bought_seats: number
   seats_filled: number
+  remaining_seats: number
+  /** Server-priced fares; the UI must not recompute these. */
+  fare_per_seat: string
+  fare_total: string
   created_by: number
   created_by_name: string
   members: ApiGroupMember[]
@@ -44,6 +52,11 @@ export interface ApiGroup {
 export interface CreateGroupInput {
   pickup: CampusLocation
   destination: CampusLocation
+  /**
+   * How many seats this student intends to pay for, including their own. The
+   * extra seats are bought out right after the group is created.
+   */
+  seats?: number
 }
 
 export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
@@ -56,6 +69,7 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
 
   const status: GroupStatus = api.status === 'FULL' ? 'FULL' : 'WAITING'
   const seatsFilled = Math.min(api.capacity, api.seats_filled ?? members.length)
+  const boughtSeats = api.bought_seats ?? 0
 
   return {
     id: String(api.id),
@@ -67,9 +81,13 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
     status,
     createdAt: api.created_at,
     tripId: undefined,
-    boughtSeats: api.bought_seats ?? 0,
+    boughtSeats,
     seatsFilled,
-    isDispatchable: members.length + (api.bought_seats ?? 0) >= api.capacity,
+    remainingSeats: api.remaining_seats ?? Math.max(0, api.capacity - seatsFilled),
+    // Server-authoritative, so every screen shows the same number.
+    farePerSeat: Number(api.fare_per_seat ?? 0),
+    fareTotal: Number(api.fare_total ?? 0),
+    isDispatchable: members.length + boughtSeats >= api.capacity,
   }
 }
 
@@ -80,14 +98,30 @@ export class GroupService {
     return groups.map((g) => mapGroup(g, currentMemberId))
   }
 
-  /** Create a new group; the creator becomes its first member. */
+  /**
+   * Create a new group; the creator becomes its first member.
+   *
+   * Coordinates are sent so the backend can price the route itself — without
+   * them it would fall back to the flat minimum fare.
+   */
   async createGroup(input: CreateGroupInput, currentMemberId?: string): Promise<Group> {
+    const pickup = coordsFor(input.pickup.id)
+    const destination = coordsFor(input.destination.id)
+
     const api = await apiClient.post<ApiGroup>(
       '/groups/',
       {
         name: `${input.pickup.name} → ${input.destination.name}`,
         pickup_location: input.pickup.name,
         destination: input.destination.name,
+        ...(pickup && destination
+          ? {
+              pickup_lat: pickup.lat,
+              pickup_lng: pickup.lng,
+              destination_lat: destination.lat,
+              destination_lng: destination.lng,
+            }
+          : {}),
         capacity: GROUP_SEATS,
       },
       { auth: true },
@@ -102,11 +136,13 @@ export class GroupService {
   }
 
   /**
-   * Pay for every remaining seat so the group can leave straight away.
-   * The backend requires the exact number of remaining seats.
+   * Pay for a number of the group's empty seats.
+   *
+   * No amount is sent: the backend prices the seats from the group's own
+   * coordinates, so the client cannot influence what is charged.
    */
-  async buyOutSeats(groupId: string, seats: number, amount: number): Promise<void> {
-    await apiClient.post(`/groups/${groupId}/buyout/`, { seats, amount, currency: CURRENCY }, { auth: true })
+  async buyOutSeats(groupId: string, seats: number): Promise<void> {
+    await apiClient.post(`/groups/${groupId}/buyout/`, { seats, currency: CURRENCY }, { auth: true })
   }
 
   /** Leave a group while keeping it alive for the remaining passengers. */

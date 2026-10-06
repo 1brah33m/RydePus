@@ -1,5 +1,3 @@
-from decimal import Decimal, InvalidOperation
-
 from django.db import transaction
 from django.db.models import Count, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
@@ -8,6 +6,7 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.pricing import total_fare
 from apps.groups.models import Group, GroupMember, MAX_GROUP_CAPACITY
 from apps.payments.models import Payment
 from apps.trips.models import Trip
@@ -46,6 +45,10 @@ class GroupSerializer(serializers.ModelSerializer):
     my_membership = serializers.SerializerMethodField()
     bought_seats = serializers.SerializerMethodField()
     seats_filled = serializers.SerializerMethodField()
+    #: Authoritative per-seat price and the full-ride total for this route.
+    fare_per_seat = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    fare_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    remaining_seats = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
@@ -63,6 +66,9 @@ class GroupSerializer(serializers.ModelSerializer):
             "member_count",
             "bought_seats",
             "seats_filled",
+            "remaining_seats",
+            "fare_per_seat",
+            "fare_total",
             "created_by",
             "created_by_name",
             "members",
@@ -76,6 +82,9 @@ class GroupSerializer(serializers.ModelSerializer):
             "member_count",
             "bought_seats",
             "seats_filled",
+            "remaining_seats",
+            "fare_per_seat",
+            "fare_total",
             "created_by",
             "created_by_name",
             "members",
@@ -100,6 +109,11 @@ class GroupSerializer(serializers.ModelSerializer):
 
     def get_seats_filled(self, obj):
         return min(obj.capacity, self.get_member_count(obj) + self.get_bought_seats(obj))
+
+    def get_remaining_seats(self, obj):
+        # Derived from the annotated counts rather than the model property so
+        # the list endpoint keeps its fixed query count.
+        return max(0, obj.capacity - self.get_seats_filled(obj))
 
     def get_created_by_name(self, obj):
         return obj.created_by.full_name
@@ -288,7 +302,12 @@ class GroupCancelView(APIView):
 
 
 class GroupBuyoutView(APIView):
-    """POST /api/v1/groups/{id}/buyout/ - fill every remaining seat to dispatch now."""
+    """POST /api/v1/groups/{id}/buyout/ - take empty seats at the server's price.
+
+    A student may buy any number of the group's empty seats (1..remaining).
+    Buying every remaining seat fills the keke and makes it dispatchable; buying
+    fewer leaves those seats open for other passengers.
+    """
 
     permission_classes = [IsStudent]
 
@@ -320,46 +339,26 @@ class GroupBuyoutView(APIView):
 
             try:
                 seats = int(request.data.get("seats", 0))
-                amount = request.data["amount"]
-            except (TypeError, ValueError, KeyError):
+            except (TypeError, ValueError):
                 return Response(
-                    {"error": {"code": "INVALID", "message": "seats and amount are required."}},
+                    {"error": {"code": "INVALID", "message": "seats is required."}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # A buyout must cover every remaining seat, otherwise the group is
-            # still short of the 4/4 dispatch threshold.
-            if seats != remaining:
+            if seats < 1 or seats > remaining:
                 return Response(
                     {
                         "error": {
                             "code": "INVALID",
-                            "message": f"A buyout must cover all {remaining} remaining seat(s).",
+                            "message": f"Buy between 1 and {remaining} seat(s); this group has {remaining} empty.",
                         }
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            try:
-                amount_value = Decimal(str(amount))
-            except (InvalidOperation, TypeError, ValueError):
-                amount_value = Decimal("0")
-            if amount_value <= 0:
-                return Response(
-                    {"error": {"code": "INVALID", "message": "Amount must be greater than zero."}},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if Payment.objects.filter(
-                group=group,
-                payer=request.user,
-                kind=Payment.Kind.GROUP_BUYOUT,
-                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
-            ).exists():
-                return Response(
-                    {"error": {"code": "INVALID", "message": "A buyout payment already exists for this group."}},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            # Priced from the coordinates stored on the group, so a client
+            # cannot underpay by sending a smaller amount.
+            amount = total_fare(group.fare_per_seat, seats)
 
             payment = Payment.objects.create(
                 group=group,
@@ -368,6 +367,9 @@ class GroupBuyoutView(APIView):
                 currency=request.data.get("currency", "NGN"),
                 seats=seats,
                 kind=Payment.Kind.GROUP_BUYOUT,
+                # Settled on declaration: there is no provider to confirm against.
+                status=Payment.Status.SUCCESSFUL,
+                confirmed_at=timezone.now(),
             )
             group.refresh_status()
 

@@ -110,6 +110,34 @@ class Group(models.Model):
         """True while a real member can still take a free seat."""
         return self.seats_filled < self.capacity
 
+    @property
+    def remaining_seats(self):
+        """Seats still to be filled or bought before the group can dispatch."""
+        return max(0, self.capacity - self.seats_filled)
+
+    @property
+    def fare_per_seat(self):
+        """The authoritative per-seat price for this route.
+
+        Computed from the coordinates stored on the group so the server, not
+        the client, decides what a seat costs.
+        """
+        from apps.core.pricing import per_seat_fare
+
+        return per_seat_fare(
+            self.pickup_lat,
+            self.pickup_lng,
+            self.destination_lat,
+            self.destination_lng,
+        )
+
+    @property
+    def fare_total(self):
+        """What the full ride costs: per-seat fare times capacity."""
+        from apps.core.pricing import total_fare
+
+        return total_fare(self.fare_per_seat, self.capacity)
+
     def __str__(self):
         return f"{self.name} ({self.seats_filled}/{self.capacity})"
 

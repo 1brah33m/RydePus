@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Banknote, Building2, Check, CheckCircle2, Copy, Hourglass, Wallet } from 'lucide-react'
+import { Banknote, Building2, Check, CheckCircle2, Copy, Wallet } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { formatCurrency } from '../../utils/format'
 import { Card } from '../ui/Card'
@@ -12,7 +12,8 @@ import type { Driver, Payment, PaymentMethod, Trip } from '../../types'
  *
  * Rydepus has no payment gateway: the student pays by hand — cash to the
  * driver, or a direct transfer to the driver's bank account — then taps
- * "I've paid". The payment sits as pending until the driver confirms receipt.
+ * "I've paid". That settles the payment on the spot; no driver confirmation is
+ * involved.
  */
 
 interface ManualPaymentCardProps {
@@ -42,34 +43,22 @@ export function ManualPaymentCard({ trip, driver, payment, onPay }: ManualPaymen
       <Card className="p-5">
         <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Payment</h2>
 
-        {payment.status === 'SUCCESS' ? (
+        {payment.status === 'FAILED' ? (
+          <div className="mt-3">
+            <Alert tone="error">
+              This payment was recorded as not received. Please pay again using the details below.
+            </Alert>
+          </div>
+        ) : (
           <div className="mt-3 flex items-start gap-3 rounded-2xl bg-brand-50 p-4 dark:bg-brand-500/10">
             <CheckCircle2 aria-hidden className="mt-0.5 size-5 shrink-0 text-brand-700 dark:text-brand-300" />
             <div>
               <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">
-                {formatCurrency(payment.amount)} received
+                {formatCurrency(payment.amount)} settled
               </p>
               <p className="mt-0.5 text-sm text-brand-800/80 dark:text-brand-200/80">
-                {driverName} confirmed your {METHOD_LABELS[payment.method].toLowerCase()} payment. Thanks for riding.
-              </p>
-            </div>
-          </div>
-        ) : payment.status === 'FAILED' ? (
-          <div className="mt-3">
-            <Alert tone="error">
-              {driverName} did not receive this payment. Please pay again using the details below.
-            </Alert>
-          </div>
-        ) : (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl bg-amber-50 p-4 dark:bg-amber-500/10">
-            <Hourglass aria-hidden className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
-            <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                Waiting for {driverName} to confirm
-              </p>
-              <p className="mt-0.5 text-sm text-amber-800/80 dark:text-amber-200/80">
-                You marked {formatCurrency(payment.amount)} as paid by{' '}
-                {METHOD_LABELS[payment.method].toLowerCase()}. The driver confirms once they have it.
+                Your {METHOD_LABELS[payment.method].toLowerCase()} payment for {payment.seats} seat
+                {payment.seats > 1 ? 's' : ''} is recorded. Thanks for riding with {driverName}.
               </p>
             </div>
           </div>
@@ -202,7 +191,7 @@ export function ManualPaymentCard({ trip, driver, payment, onPay }: ManualPaymen
         {method === 'CASH' ? "I've paid the driver in cash" : "I've sent the transfer"}
       </Button>
       <p className="mt-2.5 text-center text-xs text-ink-400 dark:text-slate-500">
-        {driverName} confirms the payment once they have it.
+        Recorded straight away. Only pay once you have the money with {driverName}.
       </p>
     </Card>
   )

@@ -20,9 +20,6 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {"anon": "10000/minute", "user": "100
 
 # No external payment provider during tests.
 PAYMENT_PROVIDER = "manual"
-# Server-side price used for group buyouts (300 per seat -> tests pass amounts
-# that used to be client-supplied).
-GROUP_SEAT_FARE = 300
 
 # Django's default PBKDF2 hasher (720k iterations) costs ~10s per password
 # check on this machine, which makes the suite hang. MD5 is fine for tests.

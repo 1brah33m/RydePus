@@ -95,12 +95,25 @@ Throttle rates are set server-side via env (`DRF_THROTTLE_ANON`,
 
 ## 6. Payment lifecycle & reconciliation
 
-- Payments start `PENDING`; they only become `SUCCESSFUL` when the provider
-  confirms them (verified webhook or the periodic reconciliation job).
-- Failed/non-confirmed charges remain `PENDING`; reconciliation marks them
-  `FAILED`, so a single webhook can never double-book state.
-- Buyout amounts are always computed server-side (`seats * GROUP_SEAT_FARE`);
-  client-supplied amounts are ignored.
+- Rides are settled by hand (cash or direct transfer), so a student's
+  declaration is the source of truth: `POST /api/v1/payments/` creates the
+  payment `SUCCESSFUL` with `confirmed_at` set. There is no driver confirmation
+  step and no confirm/reject endpoint.
+- A driver can still review fares they collected with
+  `GET /api/v1/payments/collectable/`, but that list is read-only.
+- `PENDING` and `FAILED` remain valid states for provider-backed charges and for
+  records written before this flow; migration `payments.0007` settled the
+  existing `PENDING` rows so they were not stranded.
+- Amounts are always computed and checked server-side:
+  - Trip payments must equal `seats * trip.fare` (default `seats = 1`).
+  - Buyout amounts are computed from the group's own coordinates
+    (`seats * fare_per_seat`); client-supplied amounts are ignored entirely.
+- Fares come from `apps.core.pricing`, driven by `BASE_FARE`,
+  `FARE_RATE_PER_KM`, `MIN_SEAT_FARE` and `FARE_ROUNDING`. Groups expose the
+  authoritative `fare_per_seat`, `fare_total` and `remaining_seats`.
+- A buyout may take any number of a group's empty seats (`1..remaining`).
+  Taking all of them makes the group dispatchable; taking fewer leaves those
+  seats open for other passengers.
 
 ### Refunds
 
@@ -160,7 +173,7 @@ so schema routes do not exist in a hardened production deployment.
 | `POST` | `/api/v1/groups/{id}/join/` | STUDENT | Join (capacity-protected) |
 | `POST` | `/api/v1/groups/{id}/leave/` | STUDENT | Leave |
 | `POST` | `/api/v1/groups/{id}/cancel/` | STUDENT | Cancel uncommitted group |
-| `POST` | `/api/v1/groups/{id}/buyout/` | STUDENT | Buyout payment intent |
+| `POST` | `/api/v1/groups/{id}/buyout/` | STUDENT | Buy empty seats (settles immediately) |
 | `GET/POST` | `/api/v1/trips/` | STUDENT | List (paginated) / create trip |
 | `GET` | `/api/v1/trips/available/` | verified DRIVER | Discover pending trips |
 | `POST` | `/api/v1/trips/{id}/accept/` | verified DRIVER | Accept trip |
@@ -169,7 +182,8 @@ so schema routes do not exist in a hardened production deployment.
 | `POST` | `/api/v1/trips/{id}/start/` | verified DRIVER | Start trip |
 | `POST` | `/api/v1/trips/{id}/complete/` | verified DRIVER | Complete trip |
 | `POST` | `/api/v1/trips/{id}/rating/` | participants | Rate completed trip once |
-| `GET/POST` | `/api/v1/payments/` | STUDENT | List (paginated) / create payment |
+| `GET/POST` | `/api/v1/payments/` | STUDENT | List (paginated) / create payment (settles) |
+| `GET` | `/api/v1/payments/collectable/` | DRIVER | Fares collected (read-only) |
 | `POST` | `/api/v1/payments/{id}/refund/` | STUDENT | Refund successful payment |
 | `POST` | `/api/v1/payments/webhook/` | provider | Payment/refund webhook |
 | `GET` | `/api/v1/notifications/` | Bearer | List notifications |

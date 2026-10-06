@@ -151,6 +151,15 @@ export interface Group {
   boughtSeats: number
   /** Occupied slots: joined members plus bought-out seats (capped at maxSize). */
   seatsFilled: number
+  /** Seats still open to other passengers or to a buyout. */
+  remainingSeats: number
+  /**
+   * Server-priced fare for one seat on this route, in naira. Computed by the
+   * backend from the group's coordinates; the UI only displays it.
+   */
+  farePerSeat: number
+  /** The full-ride total: farePerSeat * maxSize. */
+  fareTotal: number
   /** True when the group may be dispatched to drivers (4/4, or bought out). */
   isDispatchable: boolean
 }
@@ -190,11 +199,9 @@ export interface Payment {
   currency: string
   status: PaymentStatus
   method: PaymentMethod
-  /** Name of the student who owes or has paid; shown on the driver's confirmation list. */
+  /** Name of the student who paid. */
   payerName?: string
-  /** True while the payment is claimed sent but the driver has not confirmed it. */
-  awaitingConfirmation?: boolean
-  /** ISO timestamp of the driver's manual confirmation, when it happened. */
+  /** ISO timestamp of when the payment was settled. */
   confirmedAt?: string
   createdAt: string
 }

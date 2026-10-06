@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { getLocation } from '../../config/locations'
+import { perSeatFare } from '../../config/pricing'
+import { formatCurrency } from '../../utils/format'
 import { AppHeader } from '../../components/navigation/AppHeader'
 import { useApp } from '../../context/AppContext'
 import { useGroupJoin } from '../../hooks/useGroupJoin'
@@ -42,11 +44,10 @@ export function FindRide() {
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">Route</p>
           <RouteIndicator pickup={pickup} destination={destination} className="mt-1.5" />
-          {seats > 1 && (
-            <p className="mt-2.5 text-xs text-ink-500 dark:text-slate-400">
-              Planning for <strong className="text-ink-700 dark:text-slate-300">{seats} seats</strong>
-            </p>
-          )}
+          <p className="mt-2.5 text-xs text-ink-500 dark:text-slate-400">
+            Travelling for <strong className="text-ink-700 dark:text-slate-300">{seats} seat{seats > 1 ? 's' : ''}</strong>{' '}
+            · about {formatCurrency(perSeatFare(pickup.id, destination.id) * seats)}
+          </p>
         </Card>
 
         <section aria-label="Matching groups">
