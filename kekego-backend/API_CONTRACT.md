@@ -95,12 +95,38 @@ Throttle rates are set server-side via env (`DRF_THROTTLE_ANON`,
 
 ## 6. Payment lifecycle & reconciliation
 
-- Payments start `PENDING`; they only become `SUCCESSFUL` when the provider
-  confirms them (verified webhook or the periodic reconciliation job).
-- Failed/non-confirmed charges remain `PENDING`; reconciliation marks them
-  `FAILED`, so a single webhook can never double-book state.
-- Buyout amounts are always computed server-side (`seats * GROUP_SEAT_FARE`);
-  client-supplied amounts are ignored.
+- Rides are settled by hand (cash or direct transfer), so a student's
+  declaration is the source of truth: `POST /api/v1/payments/` creates the
+  payment `SUCCESSFUL` with `confirmed_at` set. There is no driver confirmation
+  step and no confirm/reject endpoint.
+- A driver can still review fares they collected with
+  `GET /api/v1/payments/collectable/`, but that list is read-only.
+- `PENDING` and `FAILED` remain valid states for provider-backed charges and for
+  records written before this flow; migration `payments.0007` settled the
+  existing `PENDING` rows so they were not stranded.
+- Amounts are always computed and checked server-side:
+  - Trip payments must equal `seats * trip.fare` (default `seats = 1`).
+  - Buyout amounts are computed from the group's own coordinates; client-supplied
+    amounts are ignored entirely. A buyout is one consolidated charge for the
+    whole share: the student's own seat plus the empty seats they are filling.
+    The own seat is billed only on the student's first buyout in a group, so a
+    later top-up charges only the extra seats. `seats` on the payment still
+    records the empty seats covered; the amount uses
+    `(seats + own_seat_due) * fare_per_seat`.
+- Fares come from `apps.core.pricing`, driven by `BASE_FARE`,
+  `FARE_RATE_PER_KM`, `MIN_SEAT_FARE` and `FARE_ROUNDING`. Groups expose the
+  authoritative `fare_per_seat`, `fare_total`, `remaining_seats` and the
+  per-user `own_seat_paid` flag (true once the requesting member's own seat has
+  been covered by a buyout).
+- A buyout may take any number of a group's empty seats (`1..remaining`).
+  Taking all of them makes the group dispatchable; taking fewer leaves those
+  seats open for other passengers.
+- Group creation (`POST /api/v1/groups/`) accepts an optional `seats` (1..4,
+  default 1) and `amount`. When `seats > 1` the server adds the creator and buys
+  their `seats - 1` extra seats in the same atomic request, so the response
+  already reflects the covered seats (`bought_seats`, `seats_filled`,
+  `remaining_seats`, `own_seat_paid`). Clients never need a follow-up partial
+  buyout after creating a group. Out-of-range `seats` returns `400`.
 
 ### Refunds
 
@@ -160,7 +186,7 @@ so schema routes do not exist in a hardened production deployment.
 | `POST` | `/api/v1/groups/{id}/join/` | STUDENT | Join (capacity-protected) |
 | `POST` | `/api/v1/groups/{id}/leave/` | STUDENT | Leave |
 | `POST` | `/api/v1/groups/{id}/cancel/` | STUDENT | Cancel uncommitted group |
-| `POST` | `/api/v1/groups/{id}/buyout/` | STUDENT | Buyout payment intent |
+| `POST` | `/api/v1/groups/{id}/buyout/` | STUDENT | Buy empty seats (settles immediately) |
 | `GET/POST` | `/api/v1/trips/` | STUDENT | List (paginated) / create trip |
 | `GET` | `/api/v1/trips/available/` | verified DRIVER | Discover pending trips |
 | `POST` | `/api/v1/trips/{id}/accept/` | verified DRIVER | Accept trip |
@@ -169,7 +195,8 @@ so schema routes do not exist in a hardened production deployment.
 | `POST` | `/api/v1/trips/{id}/start/` | verified DRIVER | Start trip |
 | `POST` | `/api/v1/trips/{id}/complete/` | verified DRIVER | Complete trip |
 | `POST` | `/api/v1/trips/{id}/rating/` | participants | Rate completed trip once |
-| `GET/POST` | `/api/v1/payments/` | STUDENT | List (paginated) / create payment |
+| `GET/POST` | `/api/v1/payments/` | STUDENT | List (paginated) / create payment (settles) |
+| `GET` | `/api/v1/payments/collectable/` | DRIVER | Fares collected (read-only) |
 | `POST` | `/api/v1/payments/{id}/refund/` | STUDENT | Refund successful payment |
 | `POST` | `/api/v1/payments/webhook/` | provider | Payment/refund webhook |
 | `GET` | `/api/v1/notifications/` | Bearer | List notifications |

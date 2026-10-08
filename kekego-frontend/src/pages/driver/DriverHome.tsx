@@ -18,7 +18,6 @@ import { cn } from '../../utils/cn'
 import type { Trip } from '../../types'
 import { DriverShell } from '../../components/navigation/DriverShell'
 import { OnlineToggle } from '../../components/driver/OnlineToggle'
-import { PaymentsToConfirmCard } from '../../components/driver/PaymentsToConfirmCard'
 import { useDriverRide } from '../../hooks/useDriverRide'
 
 export function DriverHome() {
@@ -31,13 +30,10 @@ export function DriverHome() {
     busy,
     completedTotal,
     history,
-    pendingPayments,
     setOnline,
     accept,
     start,
     complete,
-    confirmPayment,
-    rejectPayment,
   } = useDriverRide()
 
   const [toggling, setToggling] = useState(false)
@@ -146,12 +142,6 @@ export function DriverHome() {
         ) : (
           <OfflineCard onGoOnline={() => void handleToggle()} disabled={toggling} />
         )}
-
-        <PaymentsToConfirmCard
-          payments={pendingPayments}
-          onConfirm={confirmPayment}
-          onReject={rejectPayment}
-        />
 
         {/* Quick actions */}
         <section aria-label="Quick actions">

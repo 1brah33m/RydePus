@@ -2,7 +2,8 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
@@ -10,8 +11,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.drivers.models import DriverProfile
-from apps.groups.models import Group
+from apps.groups.models import GroupMember
 from apps.notifications.models import Notification
+from apps.payments.models import Payment
 from apps.trips.models import Rating, Trip
 from apps.users.models import User
 from apps.users.permissions import IsDriver, IsStudent
@@ -192,10 +194,38 @@ class AvailableTripListView(APIView):
             )
 
         # Only full groups (4/4, or bought out) ever reach the driver queue.
-        trips = Trip.objects.filter(
-            status=Trip.Status.PENDING,
-            driver__isnull=True,
-            group__status=Group.Status.FULL,
+        #
+        # The seat counts are derived here rather than read from the cached
+        # ``group.status`` so a trip is never hidden by a group whose status was
+        # not refreshed (e.g. a buyout that filled the last seat). Subqueries
+        # keep the two aggregates from multiplying each other through a join.
+        member_count = (
+            GroupMember.objects.filter(group=OuterRef("group"))
+            .order_by()
+            .values("group")
+            .annotate(total=Count("pk"))
+            .values("total")
+        )
+        bought_seats = (
+            Payment.objects.filter(
+                group=OuterRef("group"),
+                kind=Payment.Kind.GROUP_BUYOUT,
+                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+            )
+            .order_by()
+            .values("group")
+            .annotate(total=Coalesce(Sum("seats"), Value(0)))
+            .values("total")
+        )
+        trips = (
+            Trip.objects.filter(status=Trip.Status.PENDING, driver__isnull=True)
+            .annotate(
+                _members=Coalesce(Subquery(member_count, output_field=IntegerField()), Value(0)),
+                _bought=Coalesce(Subquery(bought_seats, output_field=IntegerField()), Value(0)),
+            )
+            .annotate(_taken=F("_members") + F("_bought"))
+            .filter(_taken__gte=F("group__capacity"))
+            .select_related("group", "created_by", "driver")
         )
         return Response(TripSerializer(trips, many=True, context={"request": request}).data)
 

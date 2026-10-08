@@ -116,8 +116,8 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     trip = Trip.objects.get(pk=trip_id)
     assert trip.status == Trip.Status.COMPLETED
 
-    # 6. Student records a cash payment; it stays PENDING until the driver
-    #    confirms they received the money (no payment provider involved).
+    # 6. Student records a cash payment, which settles on the spot: there is
+    #    no provider to call and no driver to confirm receipt.
     pay_resp = student_client.post(
         PAYMENTS_URL,
         {"trip": trip_id, "amount": 200, "currency": "NGN", "method": Payment.Method.CASH},
@@ -125,7 +125,9 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     )
     assert pay_resp.status_code == status.HTTP_201_CREATED
     payment_id = pay_resp.json()["id"]
-    assert Payment.objects.get(pk=payment_id).status == Payment.Status.PENDING
+    assert pay_resp.json()["status"] == "SUCCESSFUL"
+    assert pay_resp.json()["awaiting_confirmation"] is False
+    assert Payment.objects.get(pk=payment_id).status == Payment.Status.SUCCESSFUL
 
     # The fare must be settled exactly; a short payment is rejected.
     short_pay = student_client.post(
@@ -135,14 +137,11 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     )
     assert short_pay.status_code == status.HTTP_400_BAD_REQUEST
 
-    # The assigned driver confirms receipt, which marks it collectable.
+    # The driver sees the collected fare, and has nothing left to confirm.
     collectable = driver_client.get(COLLECTABLE_URL)
     assert collectable.status_code == status.HTTP_200_OK
     assert [row["id"] for row in collectable.json()] == [payment_id]
-
-    confirm = driver_client.post(f"{PAYMENTS_URL}{payment_id}/confirm/", format="json")
-    assert confirm.status_code == status.HTTP_200_OK, confirm.content
-    assert confirm.json()["status"] == "SUCCESSFUL"
+    assert driver_client.post(f"{PAYMENTS_URL}{payment_id}/confirm/", format="json").status_code == 404
 
     # 7. A rider in the group rates the completed ride.
     rating = student_client.post(

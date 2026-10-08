@@ -159,3 +159,66 @@ def test_canonical_list_matches_the_frontend_landmarks():
     names = re.findall(r"name: '([^']+)'", frontend.read_text(encoding="utf-8"))
     # Only the CAMPUS_LOCATIONS entries, which all precede LOCATION_COORDS.
     assert tuple(names[: len(MIGRATION.CANONICAL_NAMES)]) == MIGRATION.CANONICAL_NAMES
+# ---------------------------------------------------------------------------
+# Legacy payment settle migration
+# ---------------------------------------------------------------------------
+
+SETTLE_MIGRATION = import_module("apps.payments.migrations.0007_alter_payment_status")
+
+
+@pytest.mark.django_db
+def test_legacy_pending_payments_are_settled(student_user, driver_user):
+    """Removing the confirm endpoint must not strand previously paid students."""
+    from apps.payments.models import Payment
+    from apps.trips.models import Trip
+
+    group = Group.objects.create(
+        name="Legacy Ride",
+        pickup_location="Main Gate",
+        destination="Lecture Theatre",
+        capacity=4,
+        created_by=student_user,
+    )
+    trip = Trip.objects.create(
+        group=group,
+        created_by=student_user,
+        driver=driver_user,
+        pickup_location=group.pickup_location,
+        destination=group.destination,
+        fare=200,
+        status=Trip.Status.COMPLETED,
+    )
+    stale = Payment.objects.create(
+        trip=trip,
+        payer=student_user,
+        amount=trip.fare,
+        kind=Payment.Kind.TRIP,
+        method=Payment.Method.CASH,
+        status=Payment.Status.PENDING,
+    )
+    failed = Payment.objects.create(
+        group=group,
+        payer=student_user,
+        amount=500,
+        seats=2,
+        kind=Payment.Kind.GROUP_BUYOUT,
+        method=Payment.Method.BANK_TRANSFER,
+        status=Payment.Status.FAILED,
+    )
+
+    SETTLE_MIGRATION.settle_pending_payments(django_apps, None)
+
+    stale.refresh_from_db()
+    failed.refresh_from_db()
+    assert stale.status == Payment.Status.SUCCESSFUL
+    assert stale.confirmed_at is not None
+    # A payment the driver already rejected stays rejected.
+    assert failed.status == Payment.Status.FAILED
+
+
+@pytest.mark.django_db
+def test_new_payments_default_to_settled():
+    """The model default matters: an unset status must not become PENDING."""
+    from apps.payments.models import Payment
+
+    assert Payment._meta.get_field("status").default == Payment.Status.SUCCESSFUL

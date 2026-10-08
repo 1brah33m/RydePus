@@ -3,6 +3,7 @@ from rest_framework import status
 
 from apps.drivers.models import DriverProfile
 from apps.groups.models import Group, GroupMember
+from apps.payments.models import Payment
 from apps.trips.models import Trip
 from apps.users.models import User
 
@@ -354,6 +355,51 @@ def test_driver_queue_hides_trips_for_groups_that_are_not_full(driver_user, stud
 
     assert response.status_code == status.HTTP_200_OK
     assert hidden.id not in [item["id"] for item in response.json()]
+
+
+@pytest.mark.django_db
+def test_driver_queue_shows_bought_out_group_even_when_status_is_stale(driver_user, student_user):
+    """A buyout that filled the last seat is visible even if status was not refreshed.
+
+    Some servers filled the group's seats without recomputing ``Group.status``,
+    leaving it ``WAITING`` while all four seats were accounted for. The queue is
+    derived from the real seat counts so the ride still reaches drivers.
+    """
+    group = Group.objects.create(
+        name="Stale Status Ride",
+        pickup_location="North Gate",
+        destination="Library",
+        capacity=4,
+        created_by=student_user,
+    )
+    Payment.objects.create(
+        group=group,
+        payer=student_user,
+        amount=450,
+        seats=group.capacity - group.member_count,
+        kind=Payment.Kind.GROUP_BUYOUT,
+        status=Payment.Status.SUCCESSFUL,
+    )
+    # Deliberately do NOT refresh the group's status.
+    assert group.status == Group.Status.WAITING
+    trip = group.trip_set.create(
+        created_by=student_user,
+        pickup_location="North Gate",
+        destination="Library",
+        fare=600,
+        status=Trip.Status.PENDING,
+    )
+    DriverProfile.objects.update_or_create(
+        user=driver_user,
+        defaults={"availability_status": DriverProfile.AvailabilityStatus.ONLINE},
+    )
+
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(driver_user)
+    response = client.get(AVAILABLE_TRIPS_URL)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert trip.id in [item["id"] for item in response.json()]
 
 
 @pytest.mark.django_db

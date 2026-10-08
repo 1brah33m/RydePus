@@ -1,13 +1,12 @@
-from decimal import Decimal, InvalidOperation
-
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q, Sum
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.pricing import total_fare
 from apps.groups.models import Group, GroupMember, MAX_GROUP_CAPACITY
 from apps.payments.models import Payment
 from apps.trips.models import Trip
@@ -46,6 +45,13 @@ class GroupSerializer(serializers.ModelSerializer):
     my_membership = serializers.SerializerMethodField()
     bought_seats = serializers.SerializerMethodField()
     seats_filled = serializers.SerializerMethodField()
+    #: Authoritative per-seat price and the full-ride total for this route.
+    fare_per_seat = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    fare_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    remaining_seats = serializers.SerializerMethodField()
+    #: Whether the requesting member has already covered their own seat (a
+    #: buyout charges the student's own seat only once per group).
+    own_seat_paid = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
@@ -63,6 +69,10 @@ class GroupSerializer(serializers.ModelSerializer):
             "member_count",
             "bought_seats",
             "seats_filled",
+            "remaining_seats",
+            "own_seat_paid",
+            "fare_per_seat",
+            "fare_total",
             "created_by",
             "created_by_name",
             "members",
@@ -76,6 +86,10 @@ class GroupSerializer(serializers.ModelSerializer):
             "member_count",
             "bought_seats",
             "seats_filled",
+            "remaining_seats",
+            "own_seat_paid",
+            "fare_per_seat",
+            "fare_total",
             "created_by",
             "created_by_name",
             "members",
@@ -101,6 +115,11 @@ class GroupSerializer(serializers.ModelSerializer):
     def get_seats_filled(self, obj):
         return min(obj.capacity, self.get_member_count(obj) + self.get_bought_seats(obj))
 
+    def get_remaining_seats(self, obj):
+        # Derived from the annotated counts rather than the model property so
+        # the list endpoint keeps its fixed query count.
+        return max(0, obj.capacity - self.get_seats_filled(obj))
+
     def get_created_by_name(self, obj):
         return obj.created_by.full_name
 
@@ -124,15 +143,40 @@ class GroupSerializer(serializers.ModelSerializer):
             return obj.id in memberships
         return bool(obj.members.filter(user=user).exists())
 
+    def get_own_seat_paid(self, obj):
+        """Whether this user has already covered their own seat via a buyout."""
+        request = self.context.get("request")
+        user = request.user if request else None
+        if not user:
+            return False
+        annotated = getattr(obj, "annotated_own_seat_paid", None)
+        if annotated is not None:
+            return annotated
+        return obj.payments.filter(
+            payer=user,
+            kind=Payment.Kind.GROUP_BUYOUT,
+            status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+        ).exists()
+
 
 class GroupCreateSerializer(serializers.ModelSerializer):
-    """Create a 4-seat group and add the creator as the first member."""
+    """Create a 4-seat group and add the creator as the first member.
+
+    The creator may also declare how many seats they are paying for. The extra
+    seats are bought out in the same request (see ``GroupListView.post``) so
+    creation and payment are one atomic step — the client never has to issue a
+    follow-up partial buyout that a stricter server would reject.
+    """
 
     pickup_lat = CoordinateField()
     pickup_lng = CoordinateField()
     destination_lat = CoordinateField()
     destination_lng = CoordinateField()
     capacity = serializers.IntegerField(default=MAX_GROUP_CAPACITY, min_value=MAX_GROUP_CAPACITY, max_value=MAX_GROUP_CAPACITY)
+    #: Seats the creator is covering, including their own (1..4).
+    seats = serializers.IntegerField(default=1, min_value=1, max_value=MAX_GROUP_CAPACITY, write_only=True)
+    #: Accepted for client compatibility; the server prices the seats itself.
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, write_only=True)
 
     class Meta:
         model = Group
@@ -145,6 +189,8 @@ class GroupCreateSerializer(serializers.ModelSerializer):
             "destination_lat",
             "destination_lng",
             "capacity",
+            "seats",
+            "amount",
         )
 
     def validate(self, attrs):
@@ -155,9 +201,18 @@ class GroupCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
         return attrs
 
+    def model_fields(self, validated_data):
+        """``validated_data`` without the request-only seats/amount keys."""
+        return {key: value for key, value in validated_data.items() if key not in ("seats", "amount")}
+
     def create(self, validated_data):
         user = self.context["request"].user
-        return Group.objects.create(created_by=user, **validated_data)
+        return Group.objects.create(created_by=user, **self.model_fields(validated_data))
+
+    @property
+    def requested_seats(self) -> int:
+        """Seat count the creator asked to pay for (defaults to just their own)."""
+        return int(self.validated_data.get("seats", 1))
 
 
 class GroupListView(APIView):
@@ -184,6 +239,17 @@ class GroupListView(APIView):
                     ),
                     0,
                 ),
+                # Per-user, so the buyout quote does not charge the own seat
+                # twice. An Exists annotation keeps the endpoint at a fixed
+                # query count.
+                annotated_own_seat_paid=Exists(
+                    Payment.objects.filter(
+                        group=OuterRef("pk"),
+                        payer=request.user,
+                        kind=Payment.Kind.GROUP_BUYOUT,
+                        status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+                    )
+                ),
             )
         )
         my_group_ids = set(request.user.group_memberships.values_list("group_id", flat=True))
@@ -197,8 +263,34 @@ class GroupListView(APIView):
     def post(self, request):
         serializer = GroupCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        group = serializer.save()
+        with transaction.atomic():
+            group = serializer.save()
+            self._buy_creator_seats(group, request.user, serializer.requested_seats, request.data.get("currency"))
         return Response(GroupSerializer(group, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def _buy_creator_seats(group, user, seats, currency=None):
+        """Cover the creator's extra seats as part of group creation.
+
+        ``seats`` counts the creator's own seat, so ``seats - 1`` empty seats are
+        bought. The amount is one consolidated charge: the creator's own seat
+        (billed once) plus those extra seats, priced from the group's own
+        coordinates so the client cannot underpay.
+        """
+        extra = seats - 1
+        if extra <= 0:
+            return
+        Payment.objects.create(
+            group=group,
+            payer=user,
+            amount=total_fare(group.fare_per_seat, seats),
+            currency=currency or "NGN",
+            seats=extra,
+            kind=Payment.Kind.GROUP_BUYOUT,
+            status=Payment.Status.SUCCESSFUL,
+            confirmed_at=timezone.now(),
+        )
+        group.refresh_status()
 
 
 class GroupJoinView(APIView):
@@ -288,7 +380,15 @@ class GroupCancelView(APIView):
 
 
 class GroupBuyoutView(APIView):
-    """POST /api/v1/groups/{id}/buyout/ - fill every remaining seat to dispatch now."""
+    """POST /api/v1/groups/{id}/buyout/ - take empty seats at the server's price.
+
+    A student may buy any number of the group's empty seats (1..remaining).
+    Buying every remaining seat fills the keke and makes it dispatchable; buying
+    fewer leaves those seats open for other passengers.
+
+    One payment covers the whole share: the student's own seat (charged once)
+    plus the empty seats they are filling.
+    """
 
     permission_classes = [IsStudent]
 
@@ -318,48 +418,41 @@ class GroupBuyoutView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # A buyout is billed as one consolidated amount covering the
+            # student's own seat plus every empty seat they are filling. The own
+            # seat is charged only on the student's first buyout in this group,
+            # so topping up later never bills it twice.
+            own_seat_pending = not group.payments.filter(
+                payer=request.user,
+                kind=Payment.Kind.GROUP_BUYOUT,
+                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+            ).exists()
+
             try:
                 seats = int(request.data.get("seats", 0))
-                amount = request.data["amount"]
-            except (TypeError, ValueError, KeyError):
+            except (TypeError, ValueError):
                 return Response(
-                    {"error": {"code": "INVALID", "message": "seats and amount are required."}},
+                    {"error": {"code": "INVALID", "message": "seats is required."}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # A buyout must cover every remaining seat, otherwise the group is
-            # still short of the 4/4 dispatch threshold.
-            if seats != remaining:
+            if seats < 1 or seats > remaining:
                 return Response(
                     {
                         "error": {
                             "code": "INVALID",
-                            "message": f"A buyout must cover all {remaining} remaining seat(s).",
+                            "message": f"Buy between 1 and {remaining} seat(s); this group has {remaining} empty.",
                         }
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            try:
-                amount_value = Decimal(str(amount))
-            except (InvalidOperation, TypeError, ValueError):
-                amount_value = Decimal("0")
-            if amount_value <= 0:
-                return Response(
-                    {"error": {"code": "INVALID", "message": "Amount must be greater than zero."}},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if Payment.objects.filter(
-                group=group,
-                payer=request.user,
-                kind=Payment.Kind.GROUP_BUYOUT,
-                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
-            ).exists():
-                return Response(
-                    {"error": {"code": "INVALID", "message": "A buyout payment already exists for this group."}},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            # Priced from the coordinates stored on the group, so a client
+            # cannot underpay by sending a smaller amount. ``seats`` stays the
+            # number of empty seats covered (used for dispatch accounting), while
+            # the amount also includes the student's own seat when it is due.
+            charge_seats = seats + (1 if own_seat_pending else 0)
+            amount = total_fare(group.fare_per_seat, charge_seats)
 
             payment = Payment.objects.create(
                 group=group,
@@ -368,6 +461,9 @@ class GroupBuyoutView(APIView):
                 currency=request.data.get("currency", "NGN"),
                 seats=seats,
                 kind=Payment.Kind.GROUP_BUYOUT,
+                # Settled on declaration: there is no provider to confirm against.
+                status=Payment.Status.SUCCESSFUL,
+                confirmed_at=timezone.now(),
             )
             group.refresh_status()
 

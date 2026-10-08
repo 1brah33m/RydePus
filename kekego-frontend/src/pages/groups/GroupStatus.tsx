@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Users, X, Search, LogOut, Lock, CreditCard } from 'lucide-react'
+import { Users, X, Search, LogOut, Lock, CreditCard, Armchair } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { isGroupCancellationLocked } from '../../utils/rideStatus'
-import { perSeatFare } from '../../config/pricing'
 import { formatCurrency } from '../../utils/format'
 import { AppHeader } from '../../components/navigation/AppHeader'
 import { Button } from '../../components/ui/Button'
@@ -29,6 +28,8 @@ export function GroupStatus() {
   const [buyOutOpen, setBuyOutOpen] = useState(false)
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState<string | null>(null)
+  // Empty means "every empty seat"; a number pays for only that many.
+  const [buyOutSeats, setBuyOutSeats] = useState(0)
 
   // Once a driver is matched, the group hands over to the trip screen.
   useEffect(() => {
@@ -63,11 +64,15 @@ export function GroupStatus() {
 
   const isActive = activeGroup?.id === group.id
   const occupied = group.seatsFilled
-  const waiting = group.maxSize - occupied
+  const waiting = group.remainingSeats
   const searching = group.status === 'FULL' || group.status === 'SEARCHING_DRIVER'
   const matched = isGroupCancellationLocked(group.status)
-  const perSeat = perSeatFare(group.pickup.id, group.destination.id)
-  const buyOutTotal = perSeat * waiting
+  // Server-priced, so the number shown here is the number that gets charged.
+  const perSeat = group.farePerSeat
+  // A buyout is one consolidated charge for the whole share: the student's own
+  // seat (billed once, while it is still unpaid) plus the empty seats filled.
+  const ownSeatDue = group.ownSeatPaid ? 0 : 1
+  const buyOutTotal = perSeat * (waiting + ownSeatDue)
 
   const handleCancel = async () => {
     setBusy(true)
@@ -81,12 +86,15 @@ export function GroupStatus() {
     }
   }
 
-  /** Cover every empty seat so the group can be dispatched immediately. */
+  /**
+   * Cover the selected empty seats. Buying all of them makes the group
+   * dispatchable; buying fewer leaves those seats open for other passengers.
+   */
   const handleBuyOut = async () => {
     setBuying(true)
     setBuyError(null)
     try {
-      await buyOutGroup(group.id)
+      await buyOutGroup(group.id, buyOutSeats || undefined)
       setBuyOutOpen(false)
     } catch (err) {
       setBuyError(err instanceof Error ? err.message : 'We could not take that payment. Please try again.')
@@ -178,11 +186,13 @@ export function GroupStatus() {
                 className="mt-3"
                 onClick={() => {
                   setBuyError(null)
+                  // Default to filling everything, the usual reason to open this.
+                  setBuyOutSeats(0)
                   setBuyOutOpen(true)
                 }}
               >
                 <CreditCard aria-hidden className="size-4" />
-                Fill {waiting} seat{waiting === 1 ? '' : 's'} — {formatCurrency(buyOutTotal)}
+                Fill empty seats — up to {formatCurrency(buyOutTotal)}
               </Button>
             )}
 
@@ -210,9 +220,35 @@ export function GroupStatus() {
 
       <Modal open={buyOutOpen} onClose={() => setBuyOutOpen(false)} title="Fill the empty seats">
         <p className="text-sm leading-relaxed text-ink-600 dark:text-slate-300">
-          You&apos;re paying for the {waiting} empty seat{waiting === 1 ? '' : 's'} so everyone in this group can
-          leave right away.
+          Pay for the whole ride in one go. Fill all {waiting} empty seat{waiting === 1 ? '' : 's'} to
+          leave right away, or take just the number you need and leave the rest open for other
+          passengers.{' '}
+          {ownSeatDue === 1 && 'The total includes your own seat, charged only once.'}
         </p>
+
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">
+            Seats to pay for
+          </p>
+          <div className="mt-2 flex gap-2" role="group" aria-label="Number of seats to pay for">
+            {Array.from({ length: waiting }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setBuyOutSeats(n)}
+                aria-pressed={(buyOutSeats || waiting) === n}
+                className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+                  (buyOutSeats || waiting) === n
+                    ? 'border-brand-600 bg-brand-600 text-white'
+                    : 'border-ink-200 bg-white text-ink-600 hover:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <dl className="mt-4 space-y-2 text-sm">
           <div className="flex items-center justify-between">
             <dt className="text-ink-500 dark:text-slate-400">Empty seats</dt>
@@ -222,16 +258,31 @@ export function GroupStatus() {
             <dt className="text-ink-500 dark:text-slate-400">Fare per seat</dt>
             <dd className="font-semibold text-ink-800 dark:text-slate-200">{formatCurrency(perSeat)}</dd>
           </div>
+          <div className="flex items-center justify-between">
+            <dt className="text-ink-500 dark:text-slate-400">Empty seats to fill</dt>
+            <dd className="flex items-center gap-1.5 font-semibold text-ink-800 dark:text-slate-200">
+              <Armchair aria-hidden className="size-4" />
+              {buyOutSeats || waiting}
+            </dd>
+          </div>
+          {ownSeatDue === 1 && (
+            <div className="flex items-center justify-between">
+              <dt className="text-ink-500 dark:text-slate-400">Your own seat (one-off)</dt>
+              <dd className="font-semibold text-ink-800 dark:text-slate-200">{formatCurrency(perSeat)}</dd>
+            </div>
+          )}
           <div className="flex items-center justify-between border-t border-ink-100 pt-2 dark:border-white/10">
-            <dt className="font-semibold text-ink-800 dark:text-slate-200">Total</dt>
-            <dd className="text-lg font-bold text-brand-700 dark:text-brand-300">{formatCurrency(buyOutTotal)}</dd>
+            <dt className="font-semibold text-ink-800 dark:text-slate-200">Total for the ride</dt>
+            <dd className="text-lg font-bold text-brand-700 dark:text-brand-300">
+              {formatCurrency(perSeat * ((buyOutSeats || waiting) + ownSeatDue))}
+            </dd>
           </div>
         </dl>
         {buyError && <Alert tone="error" className="mt-4">{buyError}</Alert>}
         <div className="mt-5 flex flex-col gap-2.5">
           <Button size="lg" fullWidth loading={buying} onClick={handleBuyOut}>
             <CreditCard aria-hidden className="size-4" />
-            Pay {formatCurrency(buyOutTotal)} and go now
+            Pay {formatCurrency(perSeat * ((buyOutSeats || waiting) + ownSeatDue))}
           </Button>
           <Button size="lg" fullWidth variant="outline" onClick={() => setBuyOutOpen(false)}>
             Not now

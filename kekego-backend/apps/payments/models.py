@@ -5,11 +5,15 @@ from apps.trips.models import Trip
 
 
 class Payment(models.Model):
-    """A payment record for a completed trip or a group buyout intent.
+    """A payment record for a completed trip or a group buyout.
 
-    Rides are paid manually: the student hands over cash or transfers directly
-    to the driver's bank account, then the driver confirms receipt. A
-    ``PENDING`` payment is therefore "claimed sent, awaiting the driver".
+    Rides are paid by hand: the student hands over cash or transfers directly
+    to the driver. There is no provider to query and no driver verification
+    step, so a student's declaration settles the payment immediately and the
+    record is created ``SUCCESSFUL``.
+
+    ``PENDING`` and ``FAILED`` remain valid states for records written before
+    this flow, and for a future provider-backed reconciliation.
     """
 
     class Kind(models.TextChoices):
@@ -39,8 +43,9 @@ class Payment(models.Model):
     seats = models.PositiveIntegerField(default=1)
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.TRIP)
     method = models.CharField(max_length=20, choices=Method.choices, default=Method.CASH)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    # Manual receipt confirmation: set when the assigned driver confirms the money.
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUCCESSFUL)
+    # When the money was recorded as settled. Kept for the audit trail; the
+    # student declaring the payment sets this, not a driver.
     confirmed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -50,7 +55,8 @@ class Payment(models.Model):
     )
     confirmed_at = models.DateTimeField(null=True, blank=True)
     # Reconciliation trail. These stay empty for hand-delivered cash and bank
-    # transfers, which have no provider to settle against.
+    # transfers, which have no provider to settle against. Kept because a
+    # provider integration may be wired up later.
     idempotency_key = models.CharField(max_length=255, blank=True, default="")
     provider_reference = models.CharField(max_length=255, blank=True, default="")
     settlement_reference = models.CharField(max_length=255, blank=True, default="")
@@ -63,7 +69,11 @@ class Payment(models.Model):
 
     @property
     def awaiting_confirmation(self):
-        return self.status == self.Status.PENDING and self.kind == self.Kind.TRIP
+        """Always False: nothing waits on a driver to confirm a payment.
+
+        Kept so the API shape does not break existing clients.
+        """
+        return False
 
     class Meta:
         ordering = ("-created_at",)

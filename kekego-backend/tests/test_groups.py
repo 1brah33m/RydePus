@@ -250,8 +250,11 @@ def test_buyout_fills_remaining_seats_and_makes_group_dispatchable(student_user,
 
 
 @pytest.mark.django_db
-def test_buyout_is_rejected_for_anything_other_than_all_remaining_seats(student_user, student_client):
-    """A partial buyout would leave the group under 4/4, so it is refused."""
+@pytest.mark.parametrize("seats", [0, -1, 3, 99])
+def test_buyout_is_rejected_for_a_seat_count_outside_the_empty_range(
+    student_user, student_client, seats
+):
+    """A student may take any of the empty seats, but never more than exist."""
     group = Group.objects.create(
         name="Partial Buyout",
         pickup_location="Gate",
@@ -268,10 +271,11 @@ def test_buyout_is_rejected_for_anything_other_than_all_remaining_seats(student_
         ),
     )
     group.refresh_status()
+    assert group.seats_filled == 2  # 2 empty seats available
 
     response = student_client.post(
         f"{GROUPS_URL}{group.id}/buyout/",
-        {"seats": 1, "amount": 200, "currency": "NGN"},
+        {"seats": seats, "currency": "NGN"},
         format="json",
     )
 
@@ -400,6 +404,77 @@ def test_group_creation_rejects_any_capacity_but_four(student_client, capacity):
             "pickup_location": "Gate",
             "destination": "Hostel",
             "capacity": capacity,
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_group_creation_covers_the_creators_extra_seats(student_user, student_client):
+    """Selecting N seats buys the N-1 extra seats in the same request."""
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Two Seat Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 2,
+            "amount": 1,
+            "currency": "NGN",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["bought_seats"] == 1
+    assert body["seats_filled"] == 2
+    assert body["remaining_seats"] == 2
+    assert body["own_seat_paid"] is True
+    assert body["status"] == Group.Status.WAITING
+
+    group = Group.objects.get(pk=body["id"])
+    (payment,) = group.payments.all()
+    assert payment.kind == "GROUP_BUYOUT"
+    assert payment.seats == 1
+    # One consolidated charge: own seat + one extra.
+    assert payment.amount == group.fare_per_seat * 2
+
+
+@pytest.mark.django_db
+def test_group_creation_with_all_four_seats_is_dispatchable(student_client):
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Full Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 4,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["seats_filled"] == 4
+    assert body["remaining_seats"] == 0
+    assert body["status"] == Group.Status.FULL
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("seats", [0, -1, 5])
+def test_group_creation_rejects_a_seat_count_outside_one_to_four(student_client, seats):
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Bad Seats Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": seats,
         },
         format="json",
     )

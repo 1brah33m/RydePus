@@ -10,9 +10,8 @@ import type { DriverProfile, PayoutDetails } from '../services/driverService'
  *
  * Polls the driver's profile, the open request queue, the assigned/current
  * ride, the ride history and the fares students say they have paid, and
- * exposes the accept → start → complete lifecycle actions plus manual
- * payment confirmation. There is no fixed demo driver anymore: everything is
- * the signed-in driver's own data.
+ * exposes the accept → start → complete lifecycle actions. Payments settle on
+ * the student's side, so there is nothing here for the driver to confirm.
  */
 export function useDriverRide() {
   const [profile, setProfile] = useState<DriverProfile | null>(null)
@@ -114,24 +113,6 @@ export function useDriverRide() {
     [refresh],
   )
 
-  /** Confirm a student's cash/transfer arrived. */
-  const confirmPayment = useCallback(
-    async (paymentId: string) => {
-      await paymentService.confirmPayment(paymentId)
-      await refresh()
-    },
-    [refresh],
-  )
-
-  /** Report that a student's claimed payment never arrived. */
-  const rejectPayment = useCallback(
-    async (paymentId: string) => {
-      await paymentService.rejectPayment(paymentId)
-      await refresh()
-    },
-    [refresh],
-  )
-
   /** The trip the driver is currently assigned to (accepted or in progress). */
   const activeTrip: Trip | null =
     assigned.find((t) => t.status === 'DRIVER_ACCEPTED' || t.status === 'IN_PROGRESS') ?? null
@@ -140,8 +121,10 @@ export function useDriverRide() {
     .filter((t) => t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.fare, 0)
 
-  /** Fares a student has marked as paid, still waiting for the driver to confirm. */
-  const pendingPayments = collectable.filter((p) => p.status === 'PENDING')
+  /** Total settled fares on this driver's rides. */
+  const collectedTotal = collectable
+    .filter((p) => p.status === 'SUCCESS')
+    .reduce((sum, p) => sum + p.amount, 0)
 
   return {
     profile,
@@ -151,7 +134,7 @@ export function useDriverRide() {
     activeTrip,
     history,
     collectable,
-    pendingPayments,
+    collectedTotal,
     busy,
     completedTotal,
     setOnline,
@@ -159,8 +142,6 @@ export function useDriverRide() {
     start,
     complete,
     savePayoutDetails,
-    confirmPayment,
-    rejectPayment,
     refresh,
   }
 }

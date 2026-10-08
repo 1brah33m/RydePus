@@ -4,7 +4,8 @@ import { ChevronRight, MapPin, Crosshair, Users } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
 import { CAMPUS_LOCATIONS } from '../../config/locations'
-import { groupFare } from '../../config/pricing'
+import { perSeatFare } from '../../config/pricing'
+
 import type { Group, Trip } from '../../types'
 import { LANDING_KEY } from '../../utils/keys'
 import { formatCurrency } from '../../utils/format'
@@ -41,6 +42,9 @@ export function Home() {
 
   const [pickupId, setPickupId] = useState('')
   const [destinationId, setDestinationId] = useState('')
+  // How many seats this student is travelling for; drives the fare shown and
+  // carried into CreateGroup.
+  const [seats, setSeats] = useState(1)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -68,7 +72,12 @@ export function Home() {
       setError('Pickup and destination must be different.')
       return
     }
-    navigate(`/find?pickup=${encodeURIComponent(pickupId)}&destination=${encodeURIComponent(destinationId)}`)
+    const q = new URLSearchParams({
+      pickup: pickupId,
+      destination: destinationId,
+      seats: String(seats),
+    })
+    navigate(`/find?${q.toString()}`)
   }
 
   const handlePoolOpen = async (group: Group) => {
@@ -152,6 +161,37 @@ export function Home() {
             </div>
           </div>
 
+          <div className="mt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
+              Seats you need
+            </p>
+            <div className="mt-2 flex gap-2" role="group" aria-label="Number of seats needed">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setSeats(n)}
+                  aria-pressed={seats === n}
+                  className={`flex-1 rounded-xl border py-2 text-sm font-bold transition ${
+                    seats === n
+                      ? 'border-brand-600 bg-brand-600 text-white'
+                      : 'border-ink-200 bg-white text-ink-600 hover:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            {pickupId && destinationId && pickupId !== destinationId && (
+              <p className="mt-2 text-xs text-ink-500 dark:text-slate-400">
+                {seats} seat{seats > 1 ? 's' : ''} · about{' '}
+                <strong className="text-ink-700 dark:text-slate-300">
+                  {formatCurrency(perSeatFare(pickupId, destinationId) * seats)}
+                </strong>
+              </p>
+            )}
+          </div>
+
           {error && (
             <p role="alert" className="mt-2.5 text-sm text-rose-600">
               {error}
@@ -206,7 +246,8 @@ export function Home() {
 
 function PoolOfferCard({ group, onOpen }: { group: Group; onOpen: () => void }) {
   const occupied = group.seatsFilled
-  const poolFare = groupFare(group.pickup.id, group.destination.id)
+  // Server-priced fare for the whole keke.
+  const poolFare = group.fareTotal
 
   return (
     <button

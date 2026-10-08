@@ -13,7 +13,7 @@ import type {
 import { groupService } from '../services/groupService'
 import { tripService } from '../services/tripService'
 import { paymentService } from '../services/paymentService'
-import { perSeatFare } from '../config/pricing'
+import { GROUP_SEATS, perSeatFare } from '../config/pricing'
 import { decideDispatch } from '../utils/dispatch'
 import { useAuth } from './AuthContext'
 
@@ -131,7 +131,12 @@ interface AppContextValue {
   pendingGroups: Group[]
   allPendingGroups: Group[]
   getDriverById: (driverId: string) => Driver | null
-  createGroup: (pickup: CampusLocation, destination: CampusLocation) => Promise<Group>
+  createGroup: (
+    pickup: CampusLocation,
+    destination: CampusLocation,
+    /** How many seats to pay for, including the creator's own. Defaults to 1. */
+    seats?: number,
+  ) => Promise<Group>
   joinGroup: (groupId: string) => Promise<Group>
   cancelGroup: (groupId: string) => Promise<void>
   leaveGroup: (groupId: string) => Promise<void>
@@ -139,7 +144,8 @@ interface AppContextValue {
    * Pay for every empty seat in a group so it can leave immediately.
    * Resolves with the total charged.
    */
-  buyOutGroup: (groupId: string) => Promise<number>
+  /** Buy seats for a group; defaults to all empty seats. Returns the amount charged. */
+  buyOutGroup: (groupId: string, seats?: number) => Promise<number>
   cancelTrip: (tripId: string) => Promise<Trip>
   submitRating: (tripId: string, rating: number, comment?: string) => Promise<void>
   payForTrip: (tripId: string, method: PaymentMethod) => Promise<Payment>
@@ -176,7 +182,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         groupId: group.id,
         pickup: group.pickup,
         destination: group.destination,
-        fare: perSeatFare(group.pickup.id, group.destination.id),
+        fare: group.farePerSeat,
       })
     } catch {
       // Another member dispatched first, or the group changed underneath us.
@@ -248,8 +254,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return student
   }, [student, role])
 
+  /**
+   * Create a group and, when the student selected more than one seat on
+   * FindRide, cover those seats in the same request.
+   *
+   * The seat count travels in the creation payload so the server creates the
+   * group, adds the creator and buys their extra seats atomically. That keeps
+   * "I am paying for N seats" true without a follow-up partial buyout, which a
+   * stricter server would reject as "must cover all remaining seats".
+   */
   const createGroup = useCallback(
-    async (pickup: CampusLocation, destination: CampusLocation): Promise<Group> => {
+    async (pickup: CampusLocation, destination: CampusLocation, seats = 1): Promise<Group> => {
       requireStudent()
       if (state.activeGroupId) {
         const active = state.groups.find((g) => g.id === state.activeGroupId)
@@ -257,7 +272,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           `You are already part of an active group (${active?.code ?? 'open'}). You must leave your current group before creating a new one.`,
         )
       }
-      const group = await groupService.createGroup({ pickup, destination }, currentMemberId)
+
+      const wanted = Math.max(1, Math.min(GROUP_SEATS, Math.trunc(seats)))
+      const group = await groupService.createGroup({ pickup, destination, seats: wanted }, currentMemberId)
       writeActiveRaw(group.id, null)
       await refresh()
       return group
@@ -305,8 +322,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refresh],
   )
 
+  /**
+   * Pay for a group's empty seats. Defaults to filling every remaining seat so
+   * the group can leave immediately; `seats` lets a student pay for only the
+   * ones they intend to ride in.
+   *
+   * The backend prices the seats, so the returned amount comes from the server
+   * and not from a local calculation.
+   */
   const buyOutGroup = useCallback(
-    async (groupId: string): Promise<number> => {
+    async (groupId: string, seats?: number): Promise<number> => {
       requireStudent()
       const group = state.groups.find((g) => g.id === groupId)
       if (!group) throw new Error('We could not find this group.')
@@ -314,11 +339,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('You must be in the group to fill its empty seats.')
       }
 
-      const remaining = group.maxSize - group.seatsFilled
+      const remaining = group.remainingSeats
       if (remaining <= 0) throw new Error('This group already has all of its seats taken.')
 
-      const amount = perSeatFare(group.pickup.id, group.destination.id) * remaining
-      await groupService.buyOutSeats(group.id, remaining, amount)
+      const wanted = seats ?? remaining
+      if (!Number.isInteger(wanted) || wanted < 1 || wanted > remaining) {
+        throw new Error(`Choose between 1 and ${remaining} seat(s).`)
+      }
+
+      // A buyout is one consolidated amount for the whole share: the student's
+      // own seat (billed once) plus the empty seats they are filling. Displayed
+      // and submitted from the server's price when available; otherwise fall
+      // back to the shared pricing table. The server still reprices, so this
+      // figure only mirrors what will be charged.
+      const perSeat =
+        group.farePerSeat > 0 ? group.farePerSeat : perSeatFare(group.pickup.id, group.destination.id)
+      const chargedSeats = wanted + (group.ownSeatPaid ? 0 : 1)
+      const amount = perSeat * chargedSeats
+      await groupService.buyOutSeats(group.id, wanted, amount)
 
       const updated = await groupService.getGroups(currentMemberId)
       const fresh = updated.find((g) => g.id === groupId)

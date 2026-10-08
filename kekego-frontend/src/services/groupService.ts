@@ -1,6 +1,6 @@
 import type { CampusLocation, Group, GroupMember, GroupStatus } from '../types'
-import { findLocation } from '../config/locations'
-import { CURRENCY, GROUP_SEATS } from '../config/pricing'
+import { coordsFor, findLocation } from '../config/locations'
+import { CURRENCY, GROUP_SEATS, perSeatFare } from '../config/pricing'
 import { apiClient } from './apiClient'
 
 /**
@@ -28,11 +28,23 @@ export interface ApiGroup {
   name: string
   pickup_location: string
   destination: string
+  pickup_lat: string | null
+  pickup_lng: string | null
+  destination_lat: string | null
+  destination_lng: string | null
   capacity: number
   status: 'WAITING' | 'FULL'
   member_count: number
-  bought_seats: number
-  seats_filled: number
+  bought_seats?: number
+  seats_filled?: number
+  remaining_seats?: number
+  /**
+   * Server-priced fares. Optional because older servers do not expose them;
+   * ``mapGroup`` falls back to the shared pricing table when they are absent.
+   */
+  fare_per_seat?: string | null
+  fare_total?: string | null
+  own_seat_paid?: boolean
   created_by: number
   created_by_name: string
   members: ApiGroupMember[]
@@ -44,6 +56,11 @@ export interface ApiGroup {
 export interface CreateGroupInput {
   pickup: CampusLocation
   destination: CampusLocation
+  /**
+   * How many seats this student intends to pay for, including their own. The
+   * server covers the extra seats as part of creating the group.
+   */
+  seats?: number
 }
 
 export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
@@ -56,20 +73,35 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
 
   const status: GroupStatus = api.status === 'FULL' ? 'FULL' : 'WAITING'
   const seatsFilled = Math.min(api.capacity, api.seats_filled ?? members.length)
+  const boughtSeats = api.bought_seats ?? 0
+  const pickup = findLocation(api.pickup_location)
+  const destination = findLocation(api.destination)
+
+  // Server-authoritative when the backend prices the route, but older servers
+  // do not expose a fare at all. Falling back to the shared pricing table keeps
+  // the queue working (a trip is rejected when its fare is not positive) and
+  // keeps every screen from rendering ₦0.
+  const serverPerSeat = Number(api.fare_per_seat ?? 0)
+  const farePerSeat = serverPerSeat > 0 ? serverPerSeat : perSeatFare(pickup.id, destination.id)
+  const fareTotal = Number(api.fare_total ?? 0) || farePerSeat * api.capacity
 
   return {
     id: String(api.id),
     code: api.name,
-    pickup: findLocation(api.pickup_location),
-    destination: findLocation(api.destination),
+    pickup,
+    destination,
     members,
     maxSize: api.capacity,
     status,
     createdAt: api.created_at,
     tripId: undefined,
-    boughtSeats: api.bought_seats ?? 0,
+    boughtSeats,
     seatsFilled,
-    isDispatchable: members.length + (api.bought_seats ?? 0) >= api.capacity,
+    remainingSeats: api.remaining_seats ?? Math.max(0, api.capacity - seatsFilled),
+    farePerSeat,
+    fareTotal,
+    ownSeatPaid: api.own_seat_paid ?? false,
+    isDispatchable: members.length + boughtSeats >= api.capacity,
   }
 }
 
@@ -80,15 +112,39 @@ export class GroupService {
     return groups.map((g) => mapGroup(g, currentMemberId))
   }
 
-  /** Create a new group; the creator becomes its first member. */
+  /**
+   * Create a new group; the creator becomes its first member.
+   *
+   * Coordinates are sent so the backend can price the route itself — without
+   * them it would fall back to the flat minimum fare. The chosen seat count and
+   * its total (seats x per-seat fare) travel with the request so the backend
+   * can create and settle the creator's seats in one step; the server remains
+   * the source of truth and may reprice.
+   */
   async createGroup(input: CreateGroupInput, currentMemberId?: string): Promise<Group> {
+    const pickup = coordsFor(input.pickup.id)
+    const destination = coordsFor(input.destination.id)
+    const seats = Math.max(1, Math.min(GROUP_SEATS, Math.trunc(input.seats ?? 1)))
+    const amount = perSeatFare(input.pickup.id, input.destination.id) * seats
+
     const api = await apiClient.post<ApiGroup>(
       '/groups/',
       {
         name: `${input.pickup.name} → ${input.destination.name}`,
         pickup_location: input.pickup.name,
         destination: input.destination.name,
+        ...(pickup && destination
+          ? {
+              pickup_lat: pickup.lat,
+              pickup_lng: pickup.lng,
+              destination_lat: destination.lat,
+              destination_lng: destination.lng,
+            }
+          : {}),
         capacity: GROUP_SEATS,
+        seats,
+        amount,
+        currency: CURRENCY,
       },
       { auth: true },
     )
@@ -102,11 +158,19 @@ export class GroupService {
   }
 
   /**
-   * Pay for every remaining seat so the group can leave straight away.
-   * The backend requires the exact number of remaining seats.
+   * Pay for a number of the group's empty seats.
+   *
+   * The backend prices the seats from the group's own coordinates and treats
+   * the server price as authoritative. `amount` is sent for compatibility with
+   * endpoints that validate it up front (it is `seats x per-seat fare`); a
+   * server that reprices simply ignores it.
    */
-  async buyOutSeats(groupId: string, seats: number, amount: number): Promise<void> {
-    await apiClient.post(`/groups/${groupId}/buyout/`, { seats, amount, currency: CURRENCY }, { auth: true })
+  async buyOutSeats(groupId: string, seats: number, amount?: number): Promise<void> {
+    await apiClient.post(
+      `/groups/${groupId}/buyout/`,
+      { seats, currency: CURRENCY, ...(amount !== undefined ? { amount } : {}) },
+      { auth: true },
+    )
   }
 
   /** Leave a group while keeping it alive for the remaining passengers. */
