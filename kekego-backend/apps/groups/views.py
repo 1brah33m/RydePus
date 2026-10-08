@@ -160,13 +160,23 @@ class GroupSerializer(serializers.ModelSerializer):
 
 
 class GroupCreateSerializer(serializers.ModelSerializer):
-    """Create a 4-seat group and add the creator as the first member."""
+    """Create a 4-seat group and add the creator as the first member.
+
+    The creator may also declare how many seats they are paying for. The extra
+    seats are bought out in the same request (see ``GroupListView.post``) so
+    creation and payment are one atomic step — the client never has to issue a
+    follow-up partial buyout that a stricter server would reject.
+    """
 
     pickup_lat = CoordinateField()
     pickup_lng = CoordinateField()
     destination_lat = CoordinateField()
     destination_lng = CoordinateField()
     capacity = serializers.IntegerField(default=MAX_GROUP_CAPACITY, min_value=MAX_GROUP_CAPACITY, max_value=MAX_GROUP_CAPACITY)
+    #: Seats the creator is covering, including their own (1..4).
+    seats = serializers.IntegerField(default=1, min_value=1, max_value=MAX_GROUP_CAPACITY, write_only=True)
+    #: Accepted for client compatibility; the server prices the seats itself.
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, write_only=True)
 
     class Meta:
         model = Group
@@ -179,6 +189,8 @@ class GroupCreateSerializer(serializers.ModelSerializer):
             "destination_lat",
             "destination_lng",
             "capacity",
+            "seats",
+            "amount",
         )
 
     def validate(self, attrs):
@@ -189,9 +201,18 @@ class GroupCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
         return attrs
 
+    def model_fields(self, validated_data):
+        """``validated_data`` without the request-only seats/amount keys."""
+        return {key: value for key, value in validated_data.items() if key not in ("seats", "amount")}
+
     def create(self, validated_data):
         user = self.context["request"].user
-        return Group.objects.create(created_by=user, **validated_data)
+        return Group.objects.create(created_by=user, **self.model_fields(validated_data))
+
+    @property
+    def requested_seats(self) -> int:
+        """Seat count the creator asked to pay for (defaults to just their own)."""
+        return int(self.validated_data.get("seats", 1))
 
 
 class GroupListView(APIView):
@@ -242,8 +263,34 @@ class GroupListView(APIView):
     def post(self, request):
         serializer = GroupCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        group = serializer.save()
+        with transaction.atomic():
+            group = serializer.save()
+            self._buy_creator_seats(group, request.user, serializer.requested_seats, request.data.get("currency"))
         return Response(GroupSerializer(group, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def _buy_creator_seats(group, user, seats, currency=None):
+        """Cover the creator's extra seats as part of group creation.
+
+        ``seats`` counts the creator's own seat, so ``seats - 1`` empty seats are
+        bought. The amount is one consolidated charge: the creator's own seat
+        (billed once) plus those extra seats, priced from the group's own
+        coordinates so the client cannot underpay.
+        """
+        extra = seats - 1
+        if extra <= 0:
+            return
+        Payment.objects.create(
+            group=group,
+            payer=user,
+            amount=total_fare(group.fare_per_seat, seats),
+            currency=currency or "NGN",
+            seats=extra,
+            kind=Payment.Kind.GROUP_BUYOUT,
+            status=Payment.Status.SUCCESSFUL,
+            confirmed_at=timezone.now(),
+        )
+        group.refresh_status()
 
 
 class GroupJoinView(APIView):

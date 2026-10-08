@@ -408,3 +408,74 @@ def test_group_creation_rejects_any_capacity_but_four(student_client, capacity):
         format="json",
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_group_creation_covers_the_creators_extra_seats(student_user, student_client):
+    """Selecting N seats buys the N-1 extra seats in the same request."""
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Two Seat Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 2,
+            "amount": 1,
+            "currency": "NGN",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["bought_seats"] == 1
+    assert body["seats_filled"] == 2
+    assert body["remaining_seats"] == 2
+    assert body["own_seat_paid"] is True
+    assert body["status"] == Group.Status.WAITING
+
+    group = Group.objects.get(pk=body["id"])
+    (payment,) = group.payments.all()
+    assert payment.kind == "GROUP_BUYOUT"
+    assert payment.seats == 1
+    # One consolidated charge: own seat + one extra.
+    assert payment.amount == group.fare_per_seat * 2
+
+
+@pytest.mark.django_db
+def test_group_creation_with_all_four_seats_is_dispatchable(student_client):
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Full Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 4,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["seats_filled"] == 4
+    assert body["remaining_seats"] == 0
+    assert body["status"] == Group.Status.FULL
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("seats", [0, -1, 5])
+def test_group_creation_rejects_a_seat_count_outside_one_to_four(student_client, seats):
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Bad Seats Ride",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": seats,
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST

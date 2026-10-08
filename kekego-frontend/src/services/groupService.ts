@@ -58,7 +58,7 @@ export interface CreateGroupInput {
   destination: CampusLocation
   /**
    * How many seats this student intends to pay for, including their own. The
-   * extra seats are bought out right after the group is created.
+   * server covers the extra seats as part of creating the group.
    */
   seats?: number
 }

@@ -115,6 +115,30 @@ def main():
     )
     check("remaining_seats == 3 after the creator joins", group["remaining_seats"] == 3, group.get("remaining_seats"))
 
+    print("\nSelecting extra seats at creation covers them in one request")
+    status, two_seat = call(
+        "POST",
+        "/groups/",
+        {
+            "name": f"{suffix}-seats",
+            "pickup_location": "Main Gate",
+            "destination": "Lecture Theatre",
+            "pickup_lat": PICKUP["lat"],
+            "pickup_lng": PICKUP["lng"],
+            "destination_lat": DEST["lat"],
+            "destination_lng": DEST["lng"],
+            "capacity": 4,
+            "seats": 2,
+            "amount": 1.0,
+            "currency": "NGN",
+        },
+        token=s_token,
+    )
+    check("creating a group with 2 seats succeeds", status == 201, status)
+    check("creator's extra seat is bought", two_seat.get("bought_seats") == 1, two_seat.get("bought_seats"))
+    check("2 seats are filled, leaving 2 empty", two_seat.get("seats_filled") == 2 and two_seat.get("remaining_seats") == 2, two_seat.get("seats_filled"))
+    check("own seat is marked paid", two_seat.get("own_seat_paid") is True, two_seat.get("own_seat_paid"))
+
     print("\nBuyout is priced by the server, not the client")
     status, buy = call(
         "POST",

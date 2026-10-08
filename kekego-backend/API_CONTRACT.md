@@ -121,6 +121,12 @@ Throttle rates are set server-side via env (`DRF_THROTTLE_ANON`,
 - A buyout may take any number of a group's empty seats (`1..remaining`).
   Taking all of them makes the group dispatchable; taking fewer leaves those
   seats open for other passengers.
+- Group creation (`POST /api/v1/groups/`) accepts an optional `seats` (1..4,
+  default 1) and `amount`. When `seats > 1` the server adds the creator and buys
+  their `seats - 1` extra seats in the same atomic request, so the response
+  already reflects the covered seats (`bought_seats`, `seats_filled`,
+  `remaining_seats`, `own_seat_paid`). Clients never need a follow-up partial
+  buyout after creating a group. Out-of-range `seats` returns `400`.
 
 ### Refunds
 

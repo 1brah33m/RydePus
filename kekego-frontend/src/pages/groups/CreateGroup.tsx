@@ -109,6 +109,10 @@ export function CreateGroup() {
   const youPay = perSeat * seats
   const fullTotal = groupFare(pickup.id, destination.id)
   const memberList = student ? [{ id: 'you', name: student.fullName, seats: 1, isCurrentUser: true } as const] : []
+  // Seats the student is covering beyond their own. `seats` slots are spoken
+  // for, so the group has `GROUP_SEATS - seats` empty seats left for others.
+  const extraSeats = seats - 1
+  const emptySeats = GROUP_SEATS - seats
 
   return (
     <>
@@ -164,15 +168,31 @@ export function CreateGroup() {
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Passengers</h2>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-500/10 px-3 py-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
-              <Users aria-hidden className="size-4" />1/{GROUP_SEATS}
+              <Users aria-hidden className="size-4" />{seats}/{GROUP_SEATS}
             </span>
           </div>
           <div className="mt-3">
-            <PassengerSlots members={memberList} maxSlots={GROUP_SEATS} waitingLabel="Empty seat" />
+            <PassengerSlots
+              members={memberList}
+              maxSlots={GROUP_SEATS}
+              boughtSeats={extraSeats}
+              waitingLabel="Empty seat"
+            />
           </div>
           <p className="mt-3 rounded-xl bg-ink-50 dark:bg-white/5 px-3.5 py-2.5 text-sm text-ink-600 dark:text-slate-400">
-            Your group needs <strong className="text-ink-800 dark:text-slate-200">{GROUP_SEATS - 1} more passenger{GROUP_SEATS - 1 > 1 ? 's' : ''}</strong> before
-            a driver is matched — or you can pay for the empty seats yourself.
+            {emptySeats > 0 ? (
+              <>
+                Your group needs{' '}
+                <strong className="text-ink-800 dark:text-slate-200">
+                  {emptySeats} more passenger{emptySeats > 1 ? 's' : ''}
+                </strong>{' '}
+                before a driver is matched — or you can pay for the empty seats yourself.
+              </>
+            ) : (
+              <strong className="text-ink-800 dark:text-slate-200">
+                All {GROUP_SEATS} seats are covered — we will match a driver right away.
+              </strong>
+            )}
           </p>
         </Card>
 

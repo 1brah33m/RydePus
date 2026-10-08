@@ -256,10 +256,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /**
    * Create a group and, when the student selected more than one seat on
-   * FindRide, pay for the extra seats straight away.
+   * FindRide, cover those seats in the same request.
    *
-   * The buyout is what makes "I am paying for N seats" true: the student's own
-   * join takes one slot and the remaining N-1 are bought at the server's price.
+   * The seat count travels in the creation payload so the server creates the
+   * group, adds the creator and buys their extra seats atomically. That keeps
+   * "I am paying for N seats" true without a follow-up partial buyout, which a
+   * stricter server would reject as "must cover all remaining seats".
    */
   const createGroup = useCallback(
     async (pickup: CampusLocation, destination: CampusLocation, seats = 1): Promise<Group> => {
@@ -274,18 +276,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const wanted = Math.max(1, Math.min(GROUP_SEATS, Math.trunc(seats)))
       const group = await groupService.createGroup({ pickup, destination, seats: wanted }, currentMemberId)
       writeActiveRaw(group.id, null)
-
-      if (wanted > 1) {
-        // The creator's own membership already holds one seat, so only the
-        // extras are bought. The buyout is one consolidated amount covering the
-        // creator's own seat plus those extras — (wanted - 1) + 1 = wanted
-        // seats. Prefer the server's per-seat price; fall back to the shared
-        // pricing table when talking to a server that does not expose it yet.
-        const perSeat = group.farePerSeat > 0 ? group.farePerSeat : perSeatFare(pickup.id, destination.id)
-        const extra = wanted - 1
-        await groupService.buyOutSeats(group.id, extra, perSeat * wanted)
-      }
-
       await refresh()
       return group
     },
