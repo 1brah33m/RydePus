@@ -165,20 +165,12 @@ def main():
     check("cannot buy more seats than are empty", status == 400, status)
 
     print("\nSeat fares multiply on trip payments")
+    # Fill the group's last empty seat. The creator has now committed all four
+    # seats; the trip screen must still show the full total due to the driver.
     call("POST", f"/groups/{group['id']}/buyout/", {"seats": 1}, token=s_token)
     status, full = call("GET", "/groups/", token=s_token)
     g = next(x for x in full if x["id"] == group["id"])
     check("group is now full", g["seats_filled"] == 4 and g["status"] == "FULL", g.get("seats_filled"))
-
-    status, trip = call(
-        "POST",
-        "/trips/",
-        {"group": group["id"], "pickup_location": "Main Gate", "destination": "Lecture Theatre", "fare": per_seat},
-        token=s_token,
-    )
-    check("trip created", status == 201, f"{status} {trip}")
-    if status != 201:
-        return
 
     status, _ = call(
         "PATCH",
@@ -187,61 +179,117 @@ def main():
         token=d_token,
     )
     check("driver goes online", status == 200, status)
-    status, avail = call("GET", "/trips/available/", token=d_token)
-    check("driver sees the request", status == 200 and any(t["id"] == trip["id"] for t in avail))
 
-    status, accepted = call("POST", f"/trips/{trip['id']}/accept/", None, token=d_token)
+    print("\nA committed student still settles the full total with the driver")
+    status, covered_trip = call(
+        "POST",
+        "/trips/",
+        {"group": group["id"], "pickup_location": "Main Gate", "destination": "Lecture Theatre", "fare": per_seat},
+        token=s_token,
+    )
+    check("trip created for the fully bought-out group", status == 201, f"{status} {covered_trip}")
+    check(
+        "trip fare_total is fare x all four seats",
+        status == 201 and abs(float(covered_trip["fare_total"]) - per_seat * 4) < 0.01,
+        covered_trip.get("fare_total") if status == 201 else status,
+    )
+    check(
+        "trip reports the committer's four seats",
+        status == 201 and covered_trip.get("my_seats") == 4,
+        covered_trip.get("my_seats") if status == 201 else status,
+    )
+    call("POST", f"/trips/{covered_trip['id']}/accept/", None, token=d_token)
+    status, committed_pay = call(
+        "POST",
+        "/payments/",
+        {"trip": covered_trip["id"], "amount": per_seat * 4, "currency": "NGN", "method": "CASH", "seats": 4},
+        token=s_token,
+    )
+    check("committed four-seat total is accepted", status == 201, f"{status} {committed_pay}")
+    check(
+        "amount is 4 x fare",
+        status == 201 and abs(float(committed_pay["amount"]) - per_seat * 4) < 0.01,
+        committed_pay.get("amount") if status == 201 else status,
+    )
+    check("all four committed seats recorded", status == 201 and committed_pay.get("seats") == 4, None)
+
+    print("\nSeat fares multiply on a normal passenger's trip payment")
+    # A fresh group filled with real passengers (no buyout), so the payer still
+    # owes their own seats and the amount must scale with the seat count.
+    pay_group = make_group(s_token, f"{suffix}-pay")
+    pay_per_seat = float(pay_group["fare_per_seat"])
+    for index in range(3):
+        rider_token, _, _ = signup("student", f"rider-{suffix}-{index}@example.com")
+        call("POST", f"/groups/{pay_group['id']}/join/", None, token=rider_token)
+    status, pay_trip = call(
+        "POST",
+        "/trips/",
+        {"group": pay_group["id"], "pickup_location": "Main Gate", "destination": "Lecture Theatre", "fare": pay_per_seat},
+        token=s_token,
+    )
+    check("trip created for the filled group", status == 201, f"{status} {pay_trip}")
+    call("PATCH", "/drivers/availability/", {"availability_status": "ONLINE"}, token=d_token)
+    status, avail = call("GET", "/trips/available/", token=d_token)
+    check("driver sees the request", status == 200 and any(t["id"] == pay_trip["id"] for t in avail))
+    status, accepted = call("POST", f"/trips/{pay_trip['id']}/accept/", None, token=d_token)
     check("driver accepts", status == 200 and accepted["status"] == "ACCEPTED", f"{status} {accepted.get('status')}")
 
     print("\nPayment settles on the student's declaration")
     status, pay = call(
         "POST",
         "/payments/",
-        {"trip": trip["id"], "amount": per_seat * 3, "currency": "NGN", "method": "CASH", "seats": 3},
+        {"trip": pay_trip["id"], "amount": pay_per_seat * 3, "currency": "NGN", "method": "CASH", "seats": 3},
         token=s_token,
     )
     check("3-seat payment accepted", status == 201, f"{status} {pay}")
-    check("amount is 3 x fare", abs(float(pay["amount"]) - per_seat * 3) < 0.01, pay.get("amount"))
+    check("amount is 3 x fare", abs(float(pay["amount"]) - pay_per_seat * 3) < 0.01, pay.get("amount"))
     check("seats recorded", pay["seats"] == 3, pay.get("seats"))
     check("status is SUCCESSFUL", pay["status"] == "SUCCESSFUL", pay.get("status"))
     check("confirmed_at is set", pay["confirmed_at"] is not None)
     check("awaiting_confirmation is False", pay["awaiting_confirmation"] is False)
 
     print("\nUnderpaying for multiple seats is rejected")
-    # A second group+ride, to test the underquote path on a clean trip.
-    group2 = make_group(s_token, f"{suffix}-b")
-    call("POST", f"/groups/{group2['id']}/buyout/", {"seats": 3}, token=s_token)
-    status, trip2 = call(
+    # A third group+ride, to test the underquote path on a clean trip.
+    under_group = make_group(s_token, f"{suffix}-under")
+    under_per_seat = float(under_group["fare_per_seat"])
+    under_riders = []
+    for index in range(3):
+        rider_token, _, _ = signup("student", f"under-rider-{suffix}-{index}@example.com")
+        under_riders.append(rider_token)
+        call("POST", f"/groups/{under_group['id']}/join/", None, token=rider_token)
+    status, under_trip = call(
         "POST",
         "/trips/",
         {
-            "group": group2["id"],
+            "group": under_group["id"],
             "pickup_location": "Main Gate",
             "destination": "Lecture Theatre",
-            "fare": group2["fare_per_seat"],
+            "fare": under_per_seat,
         },
         token=s_token,
     )
-    call("POST", f"/trips/{trip2['id']}/accept/", None, token=d_token)
-    status, err = call(
+    call("PATCH", "/drivers/availability/", {"availability_status": "ONLINE"}, token=d_token)
+    call("POST", f"/trips/{under_trip['id']}/accept/", None, token=d_token)
+    status, _ = call(
         "POST",
         "/payments/",
         {
-            "trip": trip2["id"],
-            "amount": group2["fare_per_seat"],
+            "trip": under_trip["id"],
+            "amount": under_per_seat,
             "currency": "NGN",
             "method": "CASH",
             "seats": 3,
         },
-        token=s_token,
+        token=under_riders[0],
     )
     check("claiming 3 seats at 1-seat price is refused", status == 400, status)
 
     print("\nDriver confirmation endpoints are gone")
-    status, _ = call("POST", f"/payments/{pay['id']}/confirm/", None, token=d_token)
-    check("confirm returns 404", status == 404, status)
-    status, _ = call("POST", f"/payments/{pay['id']}/reject/", None, token=d_token)
-    check("reject returns 404", status == 404, status)
+    if "id" in pay:
+        status, _ = call("POST", f"/payments/{pay['id']}/confirm/", None, token=d_token)
+        check("confirm returns 404", status == 404, status)
+        status, _ = call("POST", f"/payments/{pay['id']}/reject/", None, token=d_token)
+        check("reject returns 404", status == 404, status)
 
     status, collectable = call("GET", "/payments/collectable/", token=d_token)
     check(

@@ -2,6 +2,8 @@ import pytest
 from rest_framework import status
 
 from apps.drivers.models import DriverProfile
+from apps.groups.models import Group
+from apps.trips.models import Rating, Trip
 
 DRIVER_ME_URL = "/api/v1/drivers/me/"
 DRIVER_PAYOUT_URL = "/api/v1/drivers/payout/"
@@ -17,6 +19,42 @@ def test_driver_profile_starts_without_payout_details(driver_client):
     assert body["account_number"] == ""
     assert body["account_name"] == ""
     assert body["has_payout_details"] is False
+
+
+@pytest.mark.django_db
+def test_driver_profile_has_no_rating_until_rated(driver_client):
+    """A brand-new driver renders a clean fallback, not a missing field."""
+    response = driver_client.get(DRIVER_ME_URL)
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["rating"] is None
+    assert body["rating_count"] == 0
+
+
+@pytest.mark.django_db
+def test_driver_profile_averages_ratings_across_trips(driver_client, driver_user, student_user):
+    group = Group.objects.create(
+        name="Rated Ride",
+        pickup_location="Hostel",
+        destination="Market",
+        capacity=4,
+        created_by=student_user,
+    )
+    trip = Trip.objects.create(
+        group=group,
+        created_by=student_user,
+        driver=driver_user,
+        pickup_location=group.pickup_location,
+        destination=group.destination,
+        fare=250,
+        status=Trip.Status.COMPLETED,
+    )
+    Rating.objects.create(trip=trip, user=student_user, stars=4)
+
+    body = driver_client.get(DRIVER_ME_URL).json()
+    assert body["rating"] == 4.0
+    assert body["rating_count"] == 1
 
 
 @pytest.mark.django_db

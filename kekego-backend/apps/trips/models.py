@@ -82,6 +82,16 @@ class Trip(models.Model):
         }
         return new_status in valid_transitions.get(current, set())
 
+    @property
+    def fare_total(self):
+        """What the whole ride is worth: per-seat fare times every filled seat.
+
+        A dispatched keke has all four seats accounted for (members plus any
+        bought-out seats), so this is the full amount the driver earns on the
+        trip rather than a single seat's price.
+        """
+        return self.fare * self.group.seats_filled
+
     def __str__(self) -> str:
         return f"Trip {self.id} - {self.status}"
 

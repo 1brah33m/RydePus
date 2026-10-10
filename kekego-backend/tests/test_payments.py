@@ -461,6 +461,39 @@ def test_group_buyout_prices_each_payment_separately(student_user, student_clien
 
 
 @pytest.mark.django_db
+def test_buyout_commitment_still_settles_the_full_total_with_the_driver(
+    student_user, student_client, driver_user
+):
+    """A buyout reserves seats; the student still pays the driver the committed total."""
+    group = Group.objects.create(
+        name="Committed Ride",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+        **ROUTE,
+    )
+    student_client.post(
+        f"/api/v1/groups/{group.id}/buyout/",
+        {"seats": 3, "currency": "NGN"},
+        format="json",
+    )
+    trip = _assigned_trip(driver=driver_user, creator=student_user, group=group, fare=300)
+
+    response = student_client.post(
+        PAYMENTS_URL,
+        {"trip": trip.id, "amount": 1200, "currency": "NGN", "method": "CASH", "seats": 4},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["seats"] == 4
+    assert body["amount"] == "1200.00"
+    assert Payment.objects.get(trip=trip).seats == 4
+
+
+@pytest.mark.django_db
 def test_group_api_exposes_the_authoritative_fares(student_user, student_client):
     """The client renders these instead of computing its own price."""
     group = Group.objects.create(

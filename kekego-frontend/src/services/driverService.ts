@@ -26,6 +26,10 @@ export interface DriverProfile {
   account_number: string
   account_name: string
   has_payout_details: boolean
+  /** Average star rating across rated trips; null until the driver is rated. */
+  rating: number | null
+  /** Number of rated trips behind the average. */
+  rating_count: number
   created_at: string
   updated_at: string
 }

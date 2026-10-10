@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BadgeCheck, Car, HelpCircle, LogOut, Mail, Moon, Phone } from 'lucide-react'
+import { BadgeCheck, Car, HelpCircle, LogOut, Mail, Moon, Phone, Star } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useDriverRide } from '../../hooks/useDriverRide'
 import { DriverShell } from '../../components/navigation/DriverShell'
@@ -34,8 +34,13 @@ export function DriverProfile() {
         ? 'On a ride'
         : 'Offline'
 
+  // Fall back through the fields a driver may actually have: a vehicle name or
+  // type, otherwise the plate number, otherwise a sensible default.
+  const vehicleLabel = profile?.vehicle_type || profile?.vehicle_plate || 'Keke'
+  const ratingLabel = profile?.rating != null ? profile.rating.toFixed(1) : 'New'
+
   const rows = [
-    { icon: Car, label: 'Vehicle', value: profile?.vehicle_type },
+    { icon: Car, label: 'Vehicle', value: vehicleLabel },
     { icon: BadgeCheck, label: 'Plate Number', value: profile?.vehicle_plate },
     { icon: BadgeCheck, label: 'License Number', value: profile?.license_number },
     { icon: Mail, label: 'Email', value: profile?.email },
@@ -67,7 +72,7 @@ export function DriverProfile() {
         </header>
 
         {/* Driver stats */}
-        <section aria-label="Driver statistics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <section aria-label="Driver statistics" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           <div className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
               <span aria-hidden className={`size-2 rounded-full ${statusText === 'Offline' ? 'bg-ink-300 dark:bg-slate-600' : 'animate-pulse bg-brand-500'}`} />
@@ -81,6 +86,20 @@ export function DriverProfile() {
               Total trips
             </span>
             <p className="mt-1.5 text-2xl font-bold">{history.length}</p>
+          </div>
+          <div className="col-span-2 rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E] lg:col-span-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
+              <Star aria-hidden className="size-3.5 fill-keke-500 text-keke-500" />
+              Rating
+            </span>
+            <p className="mt-1.5 text-2xl font-bold">
+              {ratingLabel}
+              {profile && profile.rating_count > 0 && (
+                <span className="ml-1.5 text-xs font-medium text-ink-500 dark:text-slate-400">
+                  ({profile.rating_count})
+                </span>
+              )}
+            </p>
           </div>
         </section>
 

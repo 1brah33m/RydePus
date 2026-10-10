@@ -134,6 +134,18 @@ export interface GroupMember {
   isCurrentUser?: boolean
 }
 
+/**
+ * A member's seat allocation on a specific trip: their own seat plus any empty
+ * seats they bought out. Used to show the same per-passenger total to both the
+ * student and the driver.
+ */
+export interface TripPassenger {
+  id: string
+  name: string
+  /** Own seat plus any bought-out seats this member is accountable for. */
+  seats: number
+}
+
 /** A group of students sharing one keke ride. Always a 4-seat request. */
 export interface Group {
   id: string
@@ -185,6 +197,18 @@ export interface Trip {
   fare: number
   /** Passengers riding on this trip; always 1 per group member. */
   passengerCount?: number
+  /** Full amount the ride is worth: per-seat fare times every filled seat. */
+  fareTotal?: number
+  /**
+   * Each passenger's committed seat allocation for this ride (own seat plus any
+   * seats they bought out). The driver sees the same per-passenger totals.
+   */
+  passengers?: TripPassenger[]
+  /**
+   * The signed-in student's committed seats on this ride. Absent/null for a
+   * driver, who is not a passenger.
+   */
+  mySeats?: number
   rating?: number
   comment?: string
   /** Distinct IDs of passengers who attested the ride is complete (>= 2 required). */

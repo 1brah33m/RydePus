@@ -31,6 +31,9 @@ export interface ApiTrip {
   fare: string
   status: 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
   passenger_count: number
+  fare_total: string
+  passengers: { id: number; name: string; seats: number }[]
+  my_seats: number | null
   driver_name: string | null
   driver_phone: string | null
   driver_bank: { bank_name: string; account_number: string; account_name: string } | null
@@ -87,6 +90,17 @@ export function mapTrip(api: ApiTrip): Trip {
     completedAt: api.completed_at ?? undefined,
     fare: Number(api.fare),
     passengerCount: api.passenger_count,
+    // Each member's committed seats (own + bought out); shown identically to
+    // the student and the driver so their totals always agree.
+    passengers: (api.passengers ?? []).map((p) => ({
+      id: String(p.id),
+      name: p.name,
+      seats: p.seats,
+    })),
+    mySeats: api.my_seats ?? undefined,
+    // Authoritative from the server; older servers that omit it fall back to
+    // the per-seat fare times the seats actually filled.
+    fareTotal: Number(api.fare_total ?? 0) || Number(api.fare) * (api.passenger_count || 1),
     rating: api.my_rating ?? undefined,
     comment: undefined,
     completedByStudentIds: [],

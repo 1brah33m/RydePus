@@ -101,6 +101,10 @@ class PaymentCreateSerializer(serializers.ModelSerializer):
         ).exists():
             raise serializers.ValidationError("A payment already exists for this trip.")
 
+        # A seat commitment (buyout) reserves seats for the group but is not a
+        # payment to the driver: the student still settles the full committed
+        # total on the trip. The amount is already constrained to
+        # seats x trip.fare above, so a committed student is never blocked.
         return attrs
 
     def create(self, validated_data):

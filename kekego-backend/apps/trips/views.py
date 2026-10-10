@@ -37,6 +37,14 @@ class TripSerializer(serializers.ModelSerializer):
     """Serialize trip state for API responses, hydrated for the UI."""
 
     passenger_count = serializers.SerializerMethodField()
+    #: Per-seat fare times every filled seat; the full amount this ride is worth.
+    fare_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    #: Every member with the number of seats they are accountable for (their own
+    #: seat plus any empty seats they bought out). Drives the driver's per-rider
+    #: fare breakdown.
+    passengers = serializers.SerializerMethodField()
+    #: The requesting student's committed seats on this ride; None for a driver.
+    my_seats = serializers.SerializerMethodField()
     driver_name = serializers.SerializerMethodField()
     driver_phone = serializers.SerializerMethodField()
     driver_bank = serializers.SerializerMethodField()
@@ -55,6 +63,9 @@ class TripSerializer(serializers.ModelSerializer):
             "fare",
             "status",
             "passenger_count",
+            "fare_total",
+            "passengers",
+            "my_seats",
             "driver_name",
             "driver_phone",
             "driver_bank",
@@ -70,6 +81,42 @@ class TripSerializer(serializers.ModelSerializer):
     def get_passenger_count(self, obj):
         # Members plus any bought-out seats, so a dispatched ride is always 4.
         return obj.group.seats_filled
+
+    def _committed_seats_by_payer(self, group):
+        """How many extra (bought-out) seats each payer committed to, cached per group."""
+        cached = getattr(group, "_committed_seats_cache", None)
+        if cached is not None:
+            return cached
+        committed: dict[int, int] = {}
+        for payer_id, seats in Payment.objects.filter(
+            group=group,
+            kind=Payment.Kind.GROUP_BUYOUT,
+            status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+        ).values_list("payer_id", "seats"):
+            committed[payer_id] = committed.get(payer_id, 0) + seats
+        group._committed_seats_cache = committed
+        return committed
+
+    def get_passengers(self, obj):
+        """Every member with the seats they are accountable for on this ride."""
+        extras = self._committed_seats_by_payer(obj.group)
+        return [
+            {
+                "id": member.user_id,
+                "name": member.user.full_name,
+                "seats": 1 + extras.get(member.user_id, 0),
+            }
+            for member in obj.group.members.select_related("user")
+        ]
+
+    def get_my_seats(self, obj):
+        """The requesting member's committed seats, or None if they are not on the ride."""
+        request = self.context.get("request")
+        user = request.user if request else None
+        if not user or not obj.group.members.filter(user=user).exists():
+            return None
+        extras = self._committed_seats_by_payer(obj.group)
+        return 1 + extras.get(user.id, 0)
 
     def get_driver_name(self, obj):
         return obj.driver.full_name if obj.driver_id else None

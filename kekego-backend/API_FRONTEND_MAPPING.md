@@ -51,9 +51,9 @@ ID is empty the endpoint reports that Google sign-in is not configured.
 
 | Endpoint | Frontend usage | Classification | Notes |
 | --- | --- | --- | --- |
-| `GET /api/v1/drivers/me/` | Driver profile screens | Adapter | Backend profile fields differ from frontend `Driver`; rating and total trips are unavailable. |
-| `PATCH /api/v1/drivers/availability/` | Driver availability UI | Adapter | Translate frontend availability values if needed. |
-| `PATCH /api/v1/drivers/payout/` | `PayoutDetailsCard` (driver profile) | Adapter | Saves the bank account students transfer fares to. All three fields (`bank_name`, `account_number`, `account_name`) are required together; `account_number` is normalised to digits and must have at least 10. Exposed as `has_payout_details` on the profile. |
+| `GET /api/v1/drivers/me/` | Driver profile screens | Adapter | Backend profile fields differ from frontend `Driver`. Exposes the driver's vehicle (`vehicle_type`, `vehicle_plate`) and a read-only `rating` (average stars, `null` until rated) with `rating_count`. |
+| `PATCH /api/v1/drivers/availability/` | Driver availability UI | Adapter | Translate frontend availability values if needed. Also stores `vehicle_type` / `vehicle_plate`. |
+| `PATCH /api/v1/drivers/payout/` | `PayoutDetailsCard` (driver profile) | Adapter | Saves the bank account students transfer fares to. All three fields (`bank_name`, `account_number`, `account_name`) are required together; `account_number` is normalised to digits and must have at least 10. Exposed as `has_payout_details` on the profile; the card shows a saved summary with an edit toggle. |
 | `GET /api/v1/trips/available/` | Driver request queue | Adapter | Online drivers can list pending, unassigned trips. Map backend trip fields into the frontend driver request shape. |
 | No endpoint | `driverService.findDriverForRoute()` | Backend change | The frontend expects route matching and a selected driver; Django exposes pending-trip discovery but not route matching. |
 
