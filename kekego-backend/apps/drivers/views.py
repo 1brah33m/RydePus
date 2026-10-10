@@ -1,8 +1,10 @@
+from django.db.models import Avg, Count
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.drivers.models import DriverProfile
+from apps.trips.models import Rating
 from apps.users.permissions import IsDriver
 from apps.users.serializers import UserSerializer
 
@@ -17,6 +19,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source="user.role", read_only=True)
     full_name = serializers.SerializerMethodField()
     has_payout_details = serializers.BooleanField(read_only=True)
+    rating = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
 
     class Meta:
         model = DriverProfile
@@ -36,6 +40,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "account_number",
             "account_name",
             "has_payout_details",
+            "rating",
+            "rating_count",
             "created_at",
             "updated_at",
         )
@@ -43,6 +49,30 @@ class DriverProfileSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         return obj.user.full_name
+
+    def _rating_stats(self, obj):
+        """Average star rating and rating count for the driver's rated trips.
+
+        Cached on the instance so the two method fields share one query.
+        """
+        cached = getattr(obj, "_rating_stats_cache", None)
+        if cached is None:
+            aggregate = Rating.objects.filter(trip__driver=obj.user).aggregate(
+                average=Avg("stars"), count=Count("id")
+            )
+            average = aggregate["average"]
+            cached = {
+                "average": round(average, 1) if average is not None else None,
+                "count": aggregate["count"],
+            }
+            obj._rating_stats_cache = cached
+        return cached
+
+    def get_rating(self, obj):
+        return self._rating_stats(obj)["average"]
+
+    def get_rating_count(self, obj):
+        return self._rating_stats(obj)["count"]
 
 
 class DriverAvailabilitySerializer(serializers.ModelSerializer):

@@ -148,6 +148,12 @@ interface AppContextValue {
   buyOutGroup: (groupId: string, seats?: number) => Promise<number>
   cancelTrip: (tripId: string) => Promise<Trip>
   submitRating: (tripId: string, rating: number, comment?: string) => Promise<void>
+  /**
+   * Seats the signed-in student is accountable for on a trip: their own seat
+   * plus any empty seats they bought out. Shown as their full total due to the
+   * driver.
+   */
+  myTripSeats: (tripId: string) => number
   payForTrip: (tripId: string, method: PaymentMethod) => Promise<Payment>
   settleActivity: () => void
 }
@@ -387,19 +393,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refresh],
   )
 
+  /**
+   * Seats the signed-in student is accountable for on a trip: their own seat
+   * plus any empty seats they bought out. The buyout only reserves seats — the
+   * student still settles this full total with the driver — so this never
+   * returns zero for a passenger. Prefers the server's authoritative
+   * `mySeats`, falling back to the student's own buyout records.
+   */
+  const myTripSeats = useCallback(
+    (tripId: string): number => {
+      const trip = state.trips.find((t) => t.id === tripId)
+      if (!trip) return 1
+      if (trip.mySeats !== undefined && trip.mySeats !== null) return trip.mySeats
+      const extraSeats = state.payments
+        .filter((p) => p.groupId && p.groupId === trip.groupId && !p.tripId)
+        .reduce((sum, p) => sum + p.seats, 0)
+      return 1 + extraSeats
+    },
+    [state.trips, state.payments],
+  )
+
   const payForTrip = useCallback(
     async (tripId: string, method: PaymentMethod): Promise<Payment> => {
       const trip = state.trips.find((t) => t.id === tripId)
       if (!trip) throw new Error('We could not find this trip.')
+      const seats = myTripSeats(tripId)
+      if (seats < 1) throw new Error('You are not a passenger on this ride.')
       const payment = await paymentService.processPayment({
         tripId,
-        amount: trip.fare,
+        amount: trip.fare * seats,
+        seats,
         method,
       })
       await refresh()
       return payment
     },
-    [state.trips, refresh],
+    [state.trips, refresh, myTripSeats],
   )
 
   const settleActivity = useCallback(() => {
@@ -476,6 +505,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       buyOutGroup,
       cancelTrip,
       submitRating,
+      myTripSeats,
       payForTrip,
       settleActivity,
     }),
@@ -494,6 +524,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       buyOutGroup,
       cancelTrip,
       submitRating,
+      myTripSeats,
       payForTrip,
       settleActivity,
     ],

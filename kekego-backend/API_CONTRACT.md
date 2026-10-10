@@ -106,6 +106,18 @@ Throttle rates are set server-side via env (`DRF_THROTTLE_ANON`,
   existing `PENDING` rows so they were not stranded.
 - Amounts are always computed and checked server-side:
   - Trip payments must equal `seats * trip.fare` (default `seats = 1`).
+  - A buyout is a seat commitment, not a payment to the driver: a member who
+    bought out seats still settles the full committed total with the driver on
+    the trip. Their committed seats are their own seat plus every empty seat
+    they filled. No buyout blocks a trip payment; the amount is still checked
+    against `seats * trip.fare`.
+  - Trip responses expose `fare_total` (`trip.fare * seats_filled`), the full
+    ride value, plus the per-passenger allocation: `passengers` is a list of
+    `{ id, name, seats }` where `seats` is that member's own seat plus their
+    bought-out extras, and `my_seats` is the requesting member's committed seats
+    (`null` for a driver). The student's "Pay your fare" card shows
+    `my_seats * fare`, matching the per-passenger total the driver sees. Driver
+    earnings sum `fare_total` across completed trips, not a single seat's fare.
   - Buyout amounts are computed from the group's own coordinates; client-supplied
     amounts are ignored entirely. A buyout is one consolidated charge for the
     whole share: the student's own seat plus the empty seats they are filling.

@@ -19,7 +19,8 @@ import type { PaymentMethod, Trip } from '../../types'
 export function TripDetail() {
   const { tripId } = useParams<{ tripId: string }>()
   const navigate = useNavigate()
-  const { state, getDriverById, cancelTrip, submitRating, payForTrip, settleActivity } = useApp()
+  const { state, getDriverById, cancelTrip, submitRating, myTripSeats, payForTrip, settleActivity } =
+    useApp()
 
   const trip = useMemo(
     () => state.trips.find((t) => t.id === tripId) ?? state.trips.find((t) => t.code === tripId),
@@ -186,6 +187,7 @@ export function TripDetail() {
               trip={trip}
               driver={driver}
               payment={myPayment}
+              seats={myTripSeats(trip.id)}
               onPay={(method: PaymentMethod) => payForTrip(trip.id, method).then(() => undefined)}
             />
           )}
@@ -234,6 +236,7 @@ export function TripDetail() {
             trip={trip}
             driver={driver}
             payment={myPayment}
+            seats={myTripSeats(trip.id)}
             onPay={(method: PaymentMethod) => payForTrip(trip.id, method).then(() => undefined)}
           />
         )}

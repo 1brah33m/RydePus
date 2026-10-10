@@ -8,16 +8,17 @@ import {
   Map,
   Navigation,
   Power,
+  Star,
   Truck,
   Users,
   Wallet,
-  Zap,
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import type { Trip } from '../../types'
 import { DriverShell } from '../../components/navigation/DriverShell'
 import { OnlineToggle } from '../../components/driver/OnlineToggle'
+import { PassengerFareList } from '../../components/driver/PassengerFareList'
 import { useDriverRide } from '../../hooks/useDriverRide'
 
 export function DriverHome() {
@@ -48,6 +49,7 @@ export function DriverHome() {
   }
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Driver'
+  const ratingLabel = profile?.rating != null ? profile.rating.toFixed(1) : 'New'
   const nextRequest = requests[0]
 
   return (
@@ -113,8 +115,8 @@ export function DriverHome() {
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Rating</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-lg font-bold">
-                  <Zap aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
-                  —
+                  <Star aria-hidden className="size-4 fill-keke-500 text-keke-500" />
+                  {ratingLabel}
                 </dd>
               </div>
             </dl>
@@ -150,7 +152,7 @@ export function DriverHome() {
             <QuickActionCard
               icon={Truck}
               title="Vehicle & Permit"
-              subtitle={`${profile?.vehicle_plate ?? 'No plate set'} · ${profile?.vehicle_type ?? 'Keke'}`}
+              subtitle={`${profile?.vehicle_plate || 'No plate set'} · ${profile?.vehicle_type || 'Keke'}`}
               meta="Permit Verified"
               metaClassName="bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400"
             />
@@ -207,23 +209,16 @@ function RideRequestCard({
         {trip.destination.name}
       </p>
 
-      <div className="relative mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-medium">
-        <span className="inline-flex items-center gap-1">
-          <Users aria-hidden className="size-4" />
-          {trip.passengerCount ?? 1} passenger{trip.passengerCount && trip.passengerCount > 1 ? 's' : ''}
-        </span>
-        <span aria-hidden className="text-white/60">•</span>
-        <span className="inline-flex items-center gap-1">
-          <Navigation aria-hidden className="size-4" />
-          {formatCurrency(trip.fare)}/seat
-        </span>
-      </div>
+      <p className="relative mt-2 inline-flex items-center gap-1 text-sm font-medium text-white/90">
+        <Users aria-hidden className="size-4" />
+        {trip.passengerCount ?? 1} passenger{trip.passengerCount && trip.passengerCount > 1 ? 's' : ''} pooled
+      </p>
 
       <div className="relative mt-4 flex items-center justify-between gap-3">
         <div className="rounded-2xl bg-white/20 px-3.5 py-2.5 backdrop-blur-sm">
           <p className="text-[10px] font-bold uppercase tracking-wider">Total fare</p>
           <p className="text-base font-bold">
-            {formatCurrency(trip.fare * (trip.passengerCount ?? 1))}
+            {formatCurrency(trip.fareTotal ?? trip.fare * (trip.passengerCount ?? 1))}
           </p>
         </div>
         <div className="flex flex-1 gap-2">
@@ -293,6 +288,7 @@ function ActiveRideCard({
           {waitingToStart ? 'Assigned' : 'In progress'}
         </span>
       </div>
+      <PassengerFareList trip={trip} className="mt-3" />
       {waitingToStart ? (
         <button
           type="button"

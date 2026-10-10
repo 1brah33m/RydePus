@@ -21,6 +21,12 @@ interface ManualPaymentCardProps {
   driver?: Driver | null
   /** This student's payment for the trip, if one was already recorded. */
   payment?: Payment
+  /**
+   * Seats this student is accountable for on the ride: their own seat plus any
+   * empty seats they bought out. Falls back to the server-provided trip
+   * allocation, then to the recorded/one-seat default.
+   */
+  seats?: number
   onPay: (method: PaymentMethod) => Promise<void>
 }
 
@@ -29,13 +35,20 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   BANK_TRANSFER: 'Bank transfer',
 }
 
-export function ManualPaymentCard({ trip, driver, payment, onPay }: ManualPaymentCardProps) {
+export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: ManualPaymentCardProps) {
   const [method, setMethod] = useState<PaymentMethod>('CASH')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const bank = driver?.bankDetails
   const driverName = driver?.name ?? 'your driver'
+
+  // Seats still owed: zero once a seat commitment has covered them, otherwise
+  // the student's own seat. The balance is seats × the per-seat fare.
+  // The student always owes for every seat they are accountable for: the flat
+  // single-seat fare only applies to a one-seat passenger.
+  const seatCount = Math.max(1, seats ?? trip.mySeats ?? payment?.seats ?? 1)
+  const totalFare = trip.fare * seatCount
 
   /* ------------------------- already recorded ------------------------- */
   if (payment) {
@@ -91,8 +104,13 @@ export function ManualPaymentCard({ trip, driver, payment, onPay }: ManualPaymen
         <div>
           <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Pay your fare</h2>
           <p className="mt-0.5 text-sm text-ink-500 dark:text-slate-400">
-            {formatCurrency(trip.fare)} · pay {driverName} directly
+            {formatCurrency(totalFare)} · pay {driverName} directly
           </p>
+          {seatCount > 1 && (
+            <p className="mt-0.5 text-xs text-ink-400 dark:text-slate-500">
+              {formatCurrency(trip.fare)} × {seatCount} seats
+            </p>
+          )}
         </div>
         <Wallet aria-hidden className="size-5 shrink-0 text-ink-300 dark:text-slate-600" />
       </div>
@@ -162,7 +180,7 @@ export function ManualPaymentCard({ trip, driver, payment, onPay }: ManualPaymen
       {method === 'BANK_TRANSFER' && bank && (
         <div className="mt-4 rounded-2xl border border-brand-200 bg-brand-50/50 p-4 dark:border-brand-500/30 dark:bg-brand-500/5">
           <p className="text-xs font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">
-            Send {formatCurrency(trip.fare)} to
+            Send {formatCurrency(totalFare)} to
           </p>
           <dl className="mt-2.5 space-y-2.5 text-sm">
             <div className="flex items-center justify-between gap-3">

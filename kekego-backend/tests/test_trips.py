@@ -54,6 +54,62 @@ def test_student_can_create_trip_once_group_is_full(student_user, student_client
     assert body["destination"] == "Faculty Block"
     assert body["status"] == "PENDING"
     assert body["passenger_count"] == 4
+    # The whole ride is worth fare x every filled seat, not a single seat.
+    assert body["fare_total"] == "800.00"
+    # Each passenger is accountable for their own single seat.
+    assert body["my_seats"] == 1
+    assert len(body["passengers"]) == 4
+    assert all(p["seats"] == 1 for p in body["passengers"])
+
+
+@pytest.mark.django_db
+def test_trip_reports_committed_seats_per_passenger(student_user, student_client):
+    """A student who buys out empty seats is reported with that full seat count."""
+    group = Group.objects.create(
+        name="Committed Allocation",
+        pickup_location="Main Gate",
+        destination="Faculty Block",
+        capacity=4,
+        created_by=student_user,
+        pickup_lat=6.4541,
+        pickup_lng=3.3947,
+        destination_lat=6.4478,
+        destination_lng=3.3729,
+    )
+    filler = User.objects.create_user(
+        email="filler-commit@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    GroupMember.objects.create(group=group, user=filler)
+    group.refresh_status()
+
+    # The creator covers the two remaining empty seats: own + 2 = 3 committed.
+    buyout = student_client.post(
+        f"/api/v1/groups/{group.id}/buyout/",
+        {"seats": 2, "currency": "NGN"},
+        format="json",
+    )
+    assert buyout.status_code == status.HTTP_201_CREATED
+
+    response = student_client.post(
+        TRIPS_URL,
+        {
+            "group": group.id,
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "fare": 100,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["my_seats"] == 3
+    by_id = {p["id"]: p["seats"] for p in body["passengers"]}
+    assert by_id[student_user.id] == 3
+    assert by_id[filler.id] == 1
+    assert sum(by_id.values()) == 4
 
 
 @pytest.mark.django_db
@@ -593,6 +649,8 @@ def test_trip_serializer_includes_passenger_and_driver_details(student_user, dri
     assert response.status_code == status.HTTP_200_OK
     body = response.json()[0]
     assert body["passenger_count"] == 1
+    # fare_total follows the seats actually filled, not the keke's capacity.
+    assert body["fare_total"] == "100.00"
     assert body["driver_name"] == driver_user.full_name
     assert body["driver_phone"] == ""
     assert body["created_by_name"] == student_user.full_name

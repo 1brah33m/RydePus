@@ -27,7 +27,10 @@ export function useDriverRide() {
     try {
       const [p, req, ass, hist, pay] = await Promise.all([
         driverService.getProfile(),
-        tripService.getAvailableTrips(),
+        // The queue endpoint rejects with 400 while the driver is offline. Treat
+        // that as an empty queue so one offline read cannot reject the whole
+        // batch and freeze the online/offline toggle.
+        tripService.getAvailableTrips().catch(() => []),
         tripService.getAssignedTrips(),
         tripService.getDriverHistory(),
         // Kept fault-tolerant so a payments hiccup cannot blank the whole dashboard.
@@ -117,9 +120,11 @@ export function useDriverRide() {
   const activeTrip: Trip | null =
     assigned.find((t) => t.status === 'DRIVER_ACCEPTED' || t.status === 'IN_PROGRESS') ?? null
 
+  // Every filled seat earns the driver a fare, so a completed ride is worth
+  // fare x seats (four on a dispatched keke), not a single seat's price.
   const completedTotal = history
     .filter((t) => t.status === 'COMPLETED')
-    .reduce((sum, t) => sum + t.fare, 0)
+    .reduce((sum, t) => sum + (t.fareTotal ?? t.fare * (t.passengerCount ?? 1)), 0)
 
   /** Total settled fares on this driver's rides. */
   const collectedTotal = collectable

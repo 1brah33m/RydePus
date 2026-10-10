@@ -21,7 +21,7 @@ export function DriverEarnings() {
   for (const trip of completed) {
     const at = trip.completedAt ? new Date(trip.completedAt) : null
     if (at && at >= weekStart) {
-      buckets[at.getDay()] += trip.fare
+      buckets[at.getDay()] += trip.fareTotal ?? trip.fare * (trip.passengerCount ?? 1)
     }
   }
   const weekDays = [1, 2, 3, 4, 5, 6, 0].map((d) => ({ day: DAY_ORDER[d], amount: buckets[d] }))

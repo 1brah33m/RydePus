@@ -149,16 +149,20 @@ function RequestCard({
         {passengers} passenger{passengers > 1 ? 's' : ''} pooled
       </p>
 
-      <div className="mt-4 flex items-center gap-2">
-        <span className="rounded-lg bg-ink-50 px-2.5 py-1.5 text-sm font-bold dark:bg-white/5">
-          {formatCurrency(trip.fare)}
-          <span className="text-xs font-semibold text-ink-500 dark:text-slate-400">/seat</span>
-        </span>
+      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-ink-50 px-4 py-3 dark:bg-white/5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">
+            Total fare
+          </p>
+          <p className="text-xl font-bold tabular-nums">
+            {formatCurrency(trip.fareTotal ?? trip.fare * passengers)}
+          </p>
+        </div>
         <button
           type="button"
           onClick={onAccept}
           disabled={disabled}
-          className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-brand-500 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-brand-300 dark:disabled:bg-brand-500/30"
+          className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-brand-500 px-5 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-brand-300 dark:disabled:bg-brand-500/30"
         >
           Accept Request
         </button>

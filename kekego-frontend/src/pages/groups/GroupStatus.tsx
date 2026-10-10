@@ -220,9 +220,9 @@ export function GroupStatus() {
 
       <Modal open={buyOutOpen} onClose={() => setBuyOutOpen(false)} title="Fill the empty seats">
         <p className="text-sm leading-relaxed text-ink-600 dark:text-slate-300">
-          Pay for the whole ride in one go. Fill all {waiting} empty seat{waiting === 1 ? '' : 's'} to
+          Commit to the whole ride in one go. Register all {waiting} empty seat{waiting === 1 ? '' : 's'} to
           leave right away, or take just the number you need and leave the rest open for other
-          passengers.{' '}
+          passengers. This records your seat count and total — it does not pull money from a card now.{' '}
           {ownSeatDue === 1 && 'The total includes your own seat, charged only once.'}
         </p>
 
@@ -282,7 +282,7 @@ export function GroupStatus() {
         <div className="mt-5 flex flex-col gap-2.5">
           <Button size="lg" fullWidth loading={buying} onClick={handleBuyOut}>
             <CreditCard aria-hidden className="size-4" />
-            Pay {formatCurrency(perSeat * ((buyOutSeats || waiting) + ownSeatDue))}
+            Add {formatCurrency(perSeat * ((buyOutSeats || waiting) + ownSeatDue))} to trip total
           </Button>
           <Button size="lg" fullWidth variant="outline" onClick={() => setBuyOutOpen(false)}>
             Not now
