@@ -13,7 +13,7 @@ interface MobileViewportProps {
 export function MobileViewport({ children }: MobileViewportProps) {
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-50 dark:bg-charcoal">
-      <div className="h-full w-full overflow-y-auto overflow-x-hidden lg:overscroll-contain">{children}</div>
+      <div data-scroll-root="true" className="h-full w-full overflow-y-auto overflow-x-hidden lg:overscroll-contain">{children}</div>
     </div>
   )
 }
