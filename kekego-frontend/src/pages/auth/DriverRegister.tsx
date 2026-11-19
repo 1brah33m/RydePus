@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Camera, FileCheck2, UploadCloud } from 'lucide-react'
+import { CheckmarkSquare02Icon, CloudUploadIcon } from 'hugeicons-react'
 import { useAuth } from '../../context/AuthContext'
 import { authService } from '../../services/authService'
 import { isGoogleSignInConfigured, requestGoogleIdToken } from '../../services/googleAuth'
 import type { RegisterPayload } from '../../types'
 import { homePathForRole } from '../../utils/routing'
-import { initials } from '../../utils/nameInitials'
-import { checkPasswords } from '../../config/password'
-import { AuthLayout } from './AuthLayout'
+import { validatePassword } from '../../config/password'
+import { AuthSplitLayout } from '../../components/ui/AuthSplitLayout'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
@@ -19,7 +18,7 @@ import { driverService } from '../../services/driverService'
 import { GoogleIcon, NameAndPasswordFields } from './sharedAuth'
 import { cn } from '../../utils/cn'
 
-type Step = 'email' | 'profile' | 'verifying'
+type Step = 'form' | 'verifying'
 
 interface DrivingDetails {
   phone: string
@@ -45,7 +44,7 @@ export function DriverRegister() {
   const { register, status } = useAuth()
   const navigate = useNavigate()
 
-  const [step, setStep] = useState<Step>('email')
+  const [step, setStep] = useState<Step>('form')
   const [form, setForm] = useState<RegisterPayload>({
     firstName: '',
     lastName: '',
@@ -64,8 +63,6 @@ export function DriverRegister() {
   const googleLinked = Boolean(form.googleIdToken)
   const googleAvailable = isGoogleSignInConfigured()
 
-  const nameInitials = useMemo(() => initials(form.firstName, form.lastName), [form.firstName, form.lastName])
-
   // Redirect if already authenticated and not on the verifying screen.
   useEffect(() => {
     if (status === 'authenticated' && step !== 'verifying') {
@@ -73,27 +70,7 @@ export function DriverRegister() {
     }
   }, [status, step, navigate])
 
-  // ----- Email / Google step ------------------------------------------------
-
-  /**
-   * Manual entry. The name fields stay empty on purpose — we no longer guess a
-   * person's name from their email address.
-   */
-  const handleNext = (e: FormEvent) => {
-    e.preventDefault()
-    const trimmed = form.email.trim()
-    if (!trimmed) {
-      setErrors((p) => ({ ...p, email: 'Enter your email address.' }))
-      return
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setErrors((p) => ({ ...p, email: 'Enter a valid email address.' }))
-      return
-    }
-    setErrors((p) => ({ ...p, email: undefined }))
-    setForm((p) => ({ ...p, email: trimmed }))
-    setStep('profile')
-  }
+  // ----- Google sign-in ----------------------------------------------------
 
   /**
    * Real Google sign-in. The ID token is verified by the backend, which replies
@@ -113,7 +90,6 @@ export function DriverRegister() {
         email: identity.email,
         googleIdToken: idToken,
       }))
-      setStep('profile')
     } catch (err) {
       setFormError(err instanceof Error && err.message ? err.message : 'Google sign-in failed. Try again.')
     } finally {
@@ -141,7 +117,7 @@ export function DriverRegister() {
     setErrors((p) => ({ ...p, firstName: undefined, lastName: undefined }))
   }
 
-  const validateProfile = (): boolean => {
+  const validateForm = (): boolean => {
     const emailValue = form.email.trim()
     const phoneDigits = details.phone.replace(/\D/g, '')
     const next: FieldErrors = {}
@@ -160,14 +136,15 @@ export function DriverRegister() {
       next.plateNumber = 'Plate looks invalid (e.g. EPE-789XY).'
     }
     if (!details.licenseFile) next.licenseFile = 'Upload your permit or license.'
-    Object.assign(next, checkPasswords(form.password, form.confirmPassword))
+    const passwordError = validatePassword(form.password)
+    if (passwordError) next.password = passwordError
     setErrors(next)
     return Object.values(next).every((message) => !message)
   }
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault()
-    if (!validateProfile()) return
+    if (!validateForm()) return
 
     setBusy(true)
     setFormError(null)
@@ -178,6 +155,9 @@ export function DriverRegister() {
       await register(
         {
           ...form,
+          // The confirm-password field was removed from the form, but the
+          // backend still requires a matching `confirm_password`: mirror it.
+          confirmPassword: form.password,
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           email: form.email.trim().toLowerCase(),
@@ -192,46 +172,66 @@ export function DriverRegister() {
           ? err.message
           : 'We could not verify your driver credentials. Please try again.',
       )
-      setStep('profile')
+      setStep('form')
       setBusy(false)
     }
   }
 
-  // ------- Step 1 · email / Google -------
-  const IdentityStep = (
-    <div key="email" className="animate-ryde-step flex flex-col">
-      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-400">
-        Join as Driver · 1 of 2
-      </div>
-      <h1 className="text-[26px] font-bold tracking-tight text-white">Join Rydepus as Driver</h1>
-      <p className="mt-1.5 text-sm text-ink-400">Create your account to get started.</p>
+  // ------- Single registration form (account + verification merged) -------
+  const FormStep = (
+    <div key="form" className="animate-ryde-step flex flex-col">
+      <h1 className="text-[26px] font-bold tracking-tight text-foreground">Join Rydepus as Driver</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">Create your account to get started.</p>
 
       <div className="mt-7">
-        {googleAvailable ? (
+        {googleAvailable && (
           <button
             type="button"
             onClick={handleGoogle}
             disabled={googleBusy || busy}
-            className="flex h-13 w-full items-center justify-center gap-3 rounded-full bg-white text-sm font-semibold text-ink-900 transition hover:bg-gray-100 active:scale-[0.99] disabled:opacity-60"
+            className="btn-press flex h-13 w-full items-center justify-center gap-3 rounded-lg border border-border bg-card text-sm font-semibold text-foreground transition-all duration-200 hover:bg-accent hover:shadow-sm disabled:opacity-60"
           >
-            {googleBusy ? <Spinner size="sm" className="text-ink-400" /> : <GoogleIcon />}
+            {googleBusy ? <Spinner size="sm" className="text-muted-foreground" /> : <GoogleIcon />}
             {googleBusy ? 'Connecting to Google…' : 'Continue with Google'}
           </button>
-        ) : (
-          <p className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[13px] text-ink-500">
-            Google sign-in is not configured for this environment yet. Register with your email below.
-          </p>
         )}
 
-        <div className="my-6 flex items-center gap-3">
-          <span className="h-px flex-1 bg-white/10" />
-          <span className="text-xs font-medium uppercase tracking-wider text-ink-500">
-            {googleAvailable ? 'or' : ''}
-          </span>
-          <span className="h-px flex-1 bg-white/10" />
-        </div>
+        {googleAvailable && (
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-muted" />
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">or</span>
+            <span className="h-px flex-1 bg-muted" />
+          </div>
+        )}
 
-        <form onSubmit={handleNext} className="space-y-4" noValidate>
+        <form onSubmit={handleRegister} className="space-y-4" noValidate>
+          <NameAndPasswordFields
+            firstName={form.firstName}
+            lastName={form.lastName}
+            password={form.password}
+            hideConfirmation
+            confirmation={form.confirmPassword}
+            locked={googleLinked}
+            errors={errors}
+            onFirstName={(v) => setField('firstName', v)}
+            onLastName={(v) => setField('lastName', v)}
+            onPassword={(v) => setField('password', v)}
+            onConfirmation={(v) => setField('confirmPassword', v)}
+            onUnlockNames={unlockNames}
+          />
+          <DarkField
+            label="Phone number"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="08012345678"
+            value={details.phone}
+            onChange={(e) => {
+              setDetails((p) => ({ ...p, phone: e.target.value }))
+              if (errors.phone) setErrors((p) => ({ ...p, phone: undefined }))
+            }}
+            error={errors.phone}
+          />
           <DarkField
             label="Email address"
             type="email"
@@ -241,189 +241,108 @@ export function DriverRegister() {
             value={form.email}
             onChange={(e) => setField('email', e.target.value)}
             error={errors.email}
+            readOnly={googleLinked}
+            hint={googleLinked ? 'Taken from your Google account.' : undefined}
+            className={googleLinked ? 'border-ring/40 bg-accent text-accent-foreground' : undefined}
           />
+          <DarkField
+            label="Plate number"
+            placeholder="EPE-789XY"
+            value={details.plateNumber}
+            onChange={(e) => {
+              setDetails((p) => ({ ...p, plateNumber: e.target.value }))
+              if (errors.plateNumber) setErrors((p) => ({ ...p, plateNumber: undefined }))
+            }}
+            error={errors.plateNumber}
+          />
+
+          <div className="w-full">
+            <label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
+              Vehicle permit / license
+            </label>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                'flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 transition',
+                details.licenseFile
+                  ? 'border-ring/50 bg-accent'
+                  : errors.licenseFile
+                    ? 'border-destructive/60 bg-destructive/10'
+                    : 'border-border bg-muted hover:border-ring/50 hover:bg-accent',
+              )}
+            >
+              {details.licenseFile ? (
+                <>
+                  <CheckmarkSquare02Icon aria-hidden className="size-6 text-primary" />
+                  <span className="mx-auto max-w-full truncate text-sm font-medium text-primary">
+                    {details.licenseFile}
+                  </span>
+                  <span className="text-xs text-muted-foreground">Epe campus zone verification</span>
+                </>
+              ) : (
+                <>
+                  <CloudUploadIcon aria-hidden className="size-6 text-muted-foreground" />
+                  <span className="rounded-lg bg-muted px-4 py-1.5 text-sm font-semibold text-foreground transition hover:bg-accent">
+                    Upload File
+                  </span>
+                  <span className="text-xs text-muted-foreground">Permit/license for Epe campus zone · PDF, JPG or PNG</span>
+                </>
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
+            {errors.licenseFile && (
+              <p role="alert" className="mt-1.5 text-sm text-rose-400">
+                {errors.licenseFile}
+              </p>
+            )}
+          </div>
+
+          {formError && <Alert tone="error-dark">{formError}</Alert>}
+
           <Button
             type="submit"
             size="lg"
             fullWidth
-            disabled={googleBusy || busy || !form.email.trim()}
-            className="rounded-full bg-gradient-to-r from-brand-500 to-brand-600 text-base font-semibold shadow-sm hover:from-brand-400 hover:to-brand-500 disabled:from-brand-600/40 disabled:to-brand-600/40 disabled:text-white/60"
+            loading={busy}
+            className="mt-2 h-14 rounded-full bg-primary text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/30"
           >
-            Next
+            {busy ? 'Submitting…' : 'Register as Driver'}
           </Button>
         </form>
       </div>
 
-      <p className="mt-8 text-center text-sm text-ink-400">
-        <Link to="/register" className="font-semibold text-brand-400 hover:underline">
+      <p className="mt-8 text-center text-sm text-muted-foreground">
+        <Link to="/register" className="font-semibold text-primary underline-offset-4 transition-colors hover:underline">
           ← Choose a different role
         </Link>
       </p>
     </div>
   )
 
-  // ------- Step 2 · driver verification -------
-  const DetailsStep = (
-    <div key="profile" className="animate-ryde-step flex flex-col">
-      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-400">
-        Join as Driver · 2 of 2
-      </div>
-      <h1 className="text-[26px] font-bold tracking-tight text-white">Driver Verification</h1>
-      <p className="mt-1.5 text-sm text-ink-400">Provide details to operate on campus.</p>
-
-      <div className="mt-6 flex flex-col items-center">
-        <div className="relative">
-          <div className="flex size-16 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white ring-1 ring-white/10">
-            {nameInitials}
-          </div>
-          <span className="absolute -right-0.5 bottom-0 flex size-6 items-center justify-center rounded-full bg-brand-500 text-white ring-4 ring-white/10">
-            <Camera className="size-3" />
-          </span>
-        </div>
-      </div>
-
-      <form onSubmit={handleRegister} className="mt-6 space-y-4" noValidate>
-        <NameAndPasswordFields
-          firstName={form.firstName}
-          lastName={form.lastName}
-          password={form.password}
-          confirmation={form.confirmPassword}
-          locked={googleLinked}
-          errors={errors}
-          onFirstName={(v) => setField('firstName', v)}
-          onLastName={(v) => setField('lastName', v)}
-          onPassword={(v) => setField('password', v)}
-          onConfirmation={(v) => setField('confirmPassword', v)}
-          onUnlockNames={unlockNames}
-        />
-        <DarkField
-          label="Phone number"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          placeholder="08012345678"
-          value={details.phone}
-          onChange={(e) => {
-            setDetails((p) => ({ ...p, phone: e.target.value }))
-            if (errors.phone) setErrors((p) => ({ ...p, phone: undefined }))
-          }}
-          error={errors.phone}
-        />
-        <DarkField
-          label="Email address"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          placeholder="driver@email.com"
-          value={form.email}
-          onChange={(e) => setField('email', e.target.value)}
-          error={errors.email}
-          readOnly={googleLinked}
-          hint={googleLinked ? 'Taken from your Google account.' : undefined}
-          className={googleLinked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
-        />
-        <DarkField
-          label="Plate number"
-          placeholder="EPE-789XY"
-          value={details.plateNumber}
-          onChange={(e) => {
-            setDetails((p) => ({ ...p, plateNumber: e.target.value }))
-            if (errors.plateNumber) setErrors((p) => ({ ...p, plateNumber: undefined }))
-          }}
-          error={errors.plateNumber}
-        />
-
-        <div className="w-full">
-          <label className="mb-1.5 block text-[13px] font-medium text-ink-300">
-            Vehicle permit / license
-          </label>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className={cn(
-              'flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-5 transition',
-              details.licenseFile
-                ? 'border-brand-400/50 bg-brand-400/10'
-                : errors.licenseFile
-                  ? 'border-rose-400/60 bg-rose-500/10'
-                  : 'border-white/15 bg-white/[0.04] hover:border-brand-400/50 hover:bg-white/[0.06]',
-            )}
-          >
-            {details.licenseFile ? (
-              <>
-                <FileCheck2 aria-hidden className="size-6 text-brand-400" />
-                <span className="mx-auto max-w-full truncate text-sm font-medium text-brand-300">
-                  {details.licenseFile}
-                </span>
-                <span className="text-xs text-ink-500">Epe campus zone verification</span>
-              </>
-            ) : (
-              <>
-                <UploadCloud aria-hidden className="size-6 text-ink-400" />
-                <span className="rounded-full bg-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-white/15">
-                  Upload File
-                </span>
-                <span className="text-xs text-ink-500">Permit/license for Epe campus zone · PDF, JPG or PNG</span>
-              </>
-            )}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0])}
-          />
-          {errors.licenseFile && (
-            <p role="alert" className="mt-1.5 text-sm text-rose-400">
-              {errors.licenseFile}
-            </p>
-          )}
-        </div>
-
-        {formError && <Alert tone="error-dark">{formError}</Alert>}
-
-        <Button
-          type="submit"
-          size="lg"
-          fullWidth
-          loading={busy}
-          className="mt-2 h-14 rounded-full bg-brand-500 text-base font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:bg-brand-600"
-        >
-          {busy ? 'Submitting…' : 'Register as Driver'}
-        </Button>
-        <button
-          type="button"
-          onClick={() => {
-            if (!busy) setStep('email')
-          }}
-          className="mx-auto block text-sm text-ink-400 transition hover:text-white"
-        >
-          ← Back
-        </button>
-      </form>
-    </div>
-  )
-
   // ------- Step 3 · verifying -------
   const VerifyingStep = (
-    <div key="verifying" className="animate-keke-step flex flex-col items-center pt-14 text-center">
+    <div key="verifying" className="animate-ryde-step flex flex-col items-center pt-14 text-center">
       <VerifyingTimer navigate={navigate} />
       <Logo tone="dark" className="animate-pulse" />
-      <h2 className="mt-10 text-2xl font-bold tracking-tight text-white">
+      <h2 className="mt-10 text-2xl font-bold tracking-tight text-foreground">
         Verifying Driver Credentials…
       </h2>
-      <p className="mt-2 max-w-[260px] text-sm text-ink-400">This might take a moment.</p>
-      <span className="mt-8 size-9 animate-spin rounded-full border-[3px] border-white/20 border-t-brand-500" />
+      <p className="mt-2 max-w-[260px] text-sm text-muted-foreground">This might take a moment.</p>
+      <span className="mt-8 size-9 animate-spin rounded-full border-[3px] border-border border-t-primary" />
     </div>
   )
 
   return (
-    <AuthLayout>
-      {step === 'email' && IdentityStep}
-      {step === 'profile' && DetailsStep}
-      {step === 'verifying' && VerifyingStep}
-    </AuthLayout>
+    <AuthSplitLayout>
+      {step === 'verifying' ? VerifyingStep : FormStep}
+    </AuthSplitLayout>
   )
 }
 

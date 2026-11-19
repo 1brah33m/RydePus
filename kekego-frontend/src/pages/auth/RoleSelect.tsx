@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, CarFront, GraduationCap } from 'lucide-react'
+import { ArrowRight01Icon, Car01Icon, GraduationScrollIcon } from 'hugeicons-react'
 import { useAuth } from '../../context/AuthContext'
 import { authService } from '../../services/authService'
 import { homePathForRole } from '../../utils/routing'
-import { AuthLayout } from './AuthLayout'
+import { AuthSplitLayout } from '../../components/ui/AuthSplitLayout'
 
 /** Ribbon of CTAs shown after "Create Account" — pick Student or Driver. */
 export function RoleSelect() {
@@ -19,39 +19,39 @@ export function RoleSelect() {
   }, [status, navigate])
 
   return (
-    <AuthLayout title="Create your account" subtitle="Choose how you'll ride with Rydepus.">
+    <AuthSplitLayout title="Create your account" subtitle="Choose how you'll ride with Rydepus.">
       <div className="flex flex-col gap-4">
         <button
           type="button"
           onClick={() => navigate('/register/student')}
-          className="flex h-14 w-full items-center justify-between rounded-full bg-brand-500 px-6 text-base font-bold text-white shadow-lg shadow-brand-500/25 transition hover:bg-brand-600 active:scale-[0.98]"
+          className="btn-press group flex h-14 w-full animate-ryde-rise animate-delay-150 items-center justify-between rounded-lg bg-primary px-6 text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
         >
           <span className="flex items-center gap-3">
-            <GraduationCap aria-hidden className="size-5" />
+            <GraduationScrollIcon aria-hidden className="size-5 transition-transform duration-200 group-hover:scale-110" />
             Join as Student
           </span>
-          <ArrowRight aria-hidden className="size-5" />
+          <ArrowRight01Icon aria-hidden className="size-5 transition-transform duration-200 group-hover:translate-x-1" />
         </button>
 
         <button
           type="button"
           onClick={() => navigate('/register/driver')}
-          className="flex h-14 w-full items-center justify-between rounded-full border-2 border-brand-400 bg-transparent px-6 text-base font-bold text-white transition hover:bg-brand-400/15 active:scale-[0.98]"
+          className="btn-press group flex h-14 w-full animate-ryde-rise animate-delay-225 items-center justify-between rounded-lg border-2 border-border bg-transparent px-6 text-base font-bold text-foreground transition-all duration-200 hover:border-ring/60 hover:bg-accent"
         >
           <span className="flex items-center gap-3">
-            <CarFront aria-hidden className="size-5" />
+            <Car01Icon aria-hidden className="size-5 transition-transform duration-200 group-hover:scale-110" />
             Join as Driver
           </span>
-          <ArrowRight aria-hidden className="size-5" />
+          <ArrowRight01Icon aria-hidden className="size-5 transition-transform duration-200 group-hover:translate-x-1" />
         </button>
       </div>
 
-      <p className="mt-8 text-center text-sm text-ink-400">
+      <p className="mt-8 animate-ryde-rise animate-delay-300 text-center text-sm text-muted-foreground">
         Already have an account?{' '}
-        <Link to="/login" className="font-semibold text-brand-400 hover:underline">
+        <Link to="/login" className="font-semibold text-primary underline-offset-4 transition-colors hover:underline">
           Log in
         </Link>
       </p>
-    </AuthLayout>
+    </AuthSplitLayout>
   )
 }

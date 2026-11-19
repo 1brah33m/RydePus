@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Lock, Mail } from 'lucide-react'
+import { Key01Icon, Mail01Icon } from 'hugeicons-react'
 import { useAuth } from '../../context/AuthContext'
 import { authService } from '../../services/authService'
 import { homePathForRole } from '../../utils/routing'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Alert } from '../../components/ui/Alert'
-import { AuthLayout } from './AuthLayout'
+import { AuthSplitLayout } from '../../components/ui/AuthSplitLayout'
 
 interface Validation {
   identifier: string | null
@@ -53,16 +53,8 @@ export function Login() {
     }
   }
 
-  const removeDemo = () => {
-    setIdentifier('')
-    setPassword('')
-    setErrors({ identifier: null, password: null })
-    setFormError(null)
-    clearError()
-  }
-
   return (
-    <AuthLayout title="Welcome back" subtitle="Sign in to continue your ride.">
+    <AuthSplitLayout title="Welcome back" subtitle="Sign in to continue your ride.">
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Input
           tone="dark"
@@ -70,7 +62,7 @@ export function Login() {
           type="email"
           autoComplete="email"
           placeholder="you@campus.edu.ng"
-          leadingIcon={<Mail aria-hidden className="size-4.5" />}
+          leadingIcon={<Mail01Icon aria-hidden className="size-4.5" />}
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           error={errors.identifier ?? undefined}
@@ -81,7 +73,7 @@ export function Login() {
           type="password"
           autoComplete="current-password"
           placeholder="••••••••"
-          leadingIcon={<Lock aria-hidden className="size-4.5" />}
+          leadingIcon={<Key01Icon aria-hidden className="size-4.5" />}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           error={errors.password ?? undefined}
@@ -96,33 +88,18 @@ export function Login() {
           size="lg"
           fullWidth
           loading={busy}
-          className="rounded-full bg-gradient-to-r from-brand-500 to-brand-600 text-base font-semibold shadow-sm hover:from-brand-400 hover:to-brand-500"
+          className="rounded-lg bg-gradient-to-r from-primary to-primary text-base font-semibold shadow-sm transition-all duration-200 hover:from-primary/90 hover:to-primary/90 hover:shadow-md"
         >
           {busy ? 'Signing in…' : 'Sign In'}
         </Button>
       </form>
 
-      <div className="mt-5 rounded-xl border border-dashed border-white/10 bg-white/[0.04] p-3.5 text-center">
-        <p className="text-xs text-ink-500">Accounts are stored on the Rydepus API server.</p>
-        <button
-          type="button"
-          onClick={removeDemo}
-          className="mt-1 text-sm font-semibold text-brand-400 hover:underline"
-        >
-          New to Rydepus? Create an account first.
-        </button>
-        <div className="mx-auto my-2 h-px w-3/4 bg-white/10" />
-        <p className="text-xs text-ink-500">
-          Try the Student and Driver demo flows from the backend seed data, or register a fresh account.
-        </p>
-      </div>
-
-      <p className="mt-6 text-center text-sm text-ink-400">
+      <p className="mt-6 text-center text-sm text-muted-foreground">
         New to Rydepus?{' '}
-        <Link to="/register" className="font-semibold text-brand-400 hover:underline">
+        <Link to="/register" className="font-semibold text-primary underline-offset-4 transition-colors hover:underline">
           Create an account
         </Link>
       </p>
-    </AuthLayout>
+    </AuthSplitLayout>
   )
 }
