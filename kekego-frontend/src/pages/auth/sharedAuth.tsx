@@ -1,7 +1,7 @@
 /** Shared registration fields used by the student and driver sign-up flows. */
 
 import { useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { EyeIcon, ViewOffIcon } from 'hugeicons-react'
 import { DarkField } from '../../components/ui/DarkField'
 import { PASSWORD_HINT } from '../../config/password'
 
@@ -30,7 +30,12 @@ export function GoogleIcon() {
 }
 
 /**
- * First name, last name, password and confirmation for both roles.
+ * First name, last name and password for both roles, with an optional
+ * confirmation field.
+ *
+ * Pass `hideConfirmation` to render password-only (the student flow): the
+ * caller must still send a matching `confirmPassword` because the backend
+ * requires it.
  *
  * When `locked` is true the names came from a verified Google token: they are
  * shown read-only with a "use a different name" escape hatch, because the server
@@ -41,6 +46,7 @@ export function NameAndPasswordFields({
   lastName,
   password,
   confirmation,
+  hideConfirmation,
   locked,
   errors,
   onFirstName,
@@ -53,6 +59,7 @@ export function NameAndPasswordFields({
   lastName: string
   password: string
   confirmation: string
+  hideConfirmation?: boolean
   locked: boolean
   errors: { firstName?: string; lastName?: string; password?: string; confirmation?: string }
   onFirstName: (value: string) => void
@@ -67,9 +74,9 @@ export function NameAndPasswordFields({
   return (
     <>
       {locked && (
-        <p className="-mb-1 rounded-xl border border-brand-400/30 bg-brand-400/10 px-3.5 py-2.5 text-[13px] leading-snug text-brand-300">
+        <p className="-mb-1 rounded-lg border border-ring/30 bg-accent px-3.5 py-2.5 text-[13px] leading-snug text-accent-foreground">
           Name taken from your Google profile.{' '}
-          <button type="button" onClick={onUnlockNames} className="font-semibold underline hover:text-white">
+          <button type="button" onClick={onUnlockNames} className="font-semibold underline hover:text-foreground">
             Use a different name
           </button>
         </p>
@@ -84,7 +91,7 @@ export function NameAndPasswordFields({
           onChange={(e) => onFirstName(e.target.value)}
           error={errors.firstName}
           readOnly={locked}
-          className={locked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
+          className={locked ? 'border-ring/40 bg-accent text-accent-foreground' : undefined}
         />
         <DarkField
           label="Last name"
@@ -94,7 +101,7 @@ export function NameAndPasswordFields({
           onChange={(e) => onLastName(e.target.value)}
           error={errors.lastName}
           readOnly={locked}
-          className={locked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
+          className={locked ? 'border-ring/40 bg-accent text-accent-foreground' : undefined}
         />
       </div>
 
@@ -112,31 +119,33 @@ export function NameAndPasswordFields({
             type="button"
             onClick={() => setShowPassword((v) => !v)}
             aria-label={showPassword ? 'Hide password' : 'Show password'}
-            className="text-ink-400 transition hover:text-white"
+            className="text-muted-foreground transition hover:text-foreground"
           >
-            {showPassword ? <EyeOff className="size-4.5" /> : <Eye className="size-4.5" />}
+            {showPassword ? <ViewOffIcon className="size-4.5" /> : <EyeIcon className="size-4.5" />}
           </button>
         }
       />
-      <DarkField
-        label="Confirm password"
-        type={showConfirmation ? 'text' : 'password'}
-        autoComplete="new-password"
-        placeholder="••••••••••"
-        value={confirmation}
-        onChange={(e) => onConfirmation(e.target.value)}
-        error={errors.confirmation}
-        trailingIcon={
-          <button
-            type="button"
-            onClick={() => setShowConfirmation((v) => !v)}
-            aria-label={showConfirmation ? 'Hide password' : 'Show password'}
-            className="text-ink-400 transition hover:text-white"
-          >
-            {showConfirmation ? <EyeOff className="size-4.5" /> : <Eye className="size-4.5" />}
-          </button>
-        }
-      />
+      {!hideConfirmation && (
+        <DarkField
+          label="Confirm password"
+          type={showConfirmation ? 'text' : 'password'}
+          autoComplete="new-password"
+          placeholder="••••••••••"
+          value={confirmation}
+          onChange={(e) => onConfirmation(e.target.value)}
+          error={errors.confirmation}
+          trailingIcon={
+            <button
+              type="button"
+              onClick={() => setShowConfirmation((v) => !v)}
+              aria-label={showConfirmation ? 'Hide password' : 'Show password'}
+              className="text-muted-foreground transition hover:text-foreground"
+            >
+              {showConfirmation ? <ViewOffIcon className="size-4.5" /> : <EyeIcon className="size-4.5" />}
+            </button>
+          }
+        />
+      )}
     </>
   )
 }

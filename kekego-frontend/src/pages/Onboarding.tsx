@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight01Icon } from 'hugeicons-react'
 import { Logo } from '../components/ui/Logo'
 import { KekeIllustration } from '../components/splash/KekeIllustration'
 
@@ -48,7 +48,7 @@ export function Onboarding() {
               className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-white text-base font-bold text-ink-900 shadow-lg shadow-black/30 transition-transform active:scale-[0.98]"
             >
               Create Account
-              <ArrowRight aria-hidden className="size-5" />
+              <ArrowRight01Icon aria-hidden className="size-5" />
             </button>
             <button
               type="button"
