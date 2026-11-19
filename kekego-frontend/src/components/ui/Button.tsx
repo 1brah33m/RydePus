@@ -18,17 +18,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300 shadow-sm dark:bg-brand-500 dark:hover:bg-brand-400',
-  secondary: 'bg-ink-900 text-white hover:bg-ink-800 disabled:bg-ink-400 shadow-sm dark:bg-ink-200 dark:text-ink-900 dark:hover:bg-white dark:disabled:bg-ink-700',
-  outline: 'border border-ink-300 bg-white text-ink-800 hover:border-brand-500 hover:text-brand-700 dark:border-slate-700 dark:bg-[#1E1E1E] dark:text-slate-200 dark:hover:border-brand-400 dark:hover:text-brand-300',
-  ghost: 'text-ink-700 hover:bg-ink-100 dark:text-slate-300 dark:hover:bg-white/10',
-  danger: 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-400/30 dark:hover:bg-rose-500/20',
+  primary: 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-primary/40 shadow-sm',
+  secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:bg-secondary/40 shadow-sm',
+  outline: 'border border-border bg-background text-foreground hover:border-ring hover:text-foreground',
+  ghost: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+  danger: 'bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20',
 }
 
 const sizeClasses: Record<Size, string> = {
   sm: 'h-9 px-3 text-sm rounded-lg gap-1.5',
-  md: 'h-11 px-4 text-sm rounded-xl gap-2',
-  lg: 'h-13 px-6 text-base rounded-xl gap-2',
+  md: 'h-11 px-4 text-sm rounded-lg gap-2',
+  lg: 'h-13 px-6 text-base rounded-lg gap-2',
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -36,7 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const classes = cn(
-    'inline-flex items-center justify-center font-semibold transition-colors select-none disabled:pointer-events-none',
+    'btn-press inline-flex items-center justify-center font-semibold transition-colors select-none disabled:pointer-events-none',
     variantClasses[variant],
     sizeClasses[size],
     fullWidth && 'w-full',
