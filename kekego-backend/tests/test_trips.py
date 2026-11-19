@@ -92,19 +92,13 @@ def test_trip_reports_committed_seats_per_passenger(student_user, student_client
     )
     assert buyout.status_code == status.HTTP_201_CREATED
 
-    response = student_client.post(
-        TRIPS_URL,
-        {
-            "group": group.id,
-            "pickup_location": "Gate",
-            "destination": "Hostel",
-            "fare": 100,
-        },
-        format="json",
-    )
+    # The buyout filled the group, so the ride was dispatched automatically.
+    trip = Trip.objects.get(group=group)
+    assert trip.status == Trip.Status.PENDING
 
-    assert response.status_code == status.HTTP_201_CREATED
-    body = response.json()
+    response = student_client.get(TRIPS_URL)
+    assert response.status_code == status.HTTP_200_OK
+    body = next(row for row in response.json() if row["id"] == trip.id)
     assert body["my_seats"] == 3
     by_id = {p["id"]: p["seats"] for p in body["passengers"]}
     assert by_id[student_user.id] == 3
