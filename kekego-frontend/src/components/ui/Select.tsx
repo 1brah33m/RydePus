@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import type { SelectHTMLAttributes } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ArrowDown01Icon } from 'hugeicons-react'
 import { cn } from '../../utils/cn'
 
 export interface SelectOption {
@@ -22,7 +22,7 @@ export function Select({ label, options, placeholder, error, className, id, ...r
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-ink-700 dark:text-slate-300">
+        <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-muted-foreground">
           {label}
         </label>
       )}
@@ -31,10 +31,9 @@ export function Select({ label, options, placeholder, error, className, id, ...r
           id={selectId}
           aria-invalid={error ? true : undefined}
           className={cn(
-            'h-12 w-full appearance-none rounded-xl border bg-white px-4 pr-10 text-base text-ink-900 transition-shadow',
-            'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 focus:outline-none',
-            'dark:border-slate-700 dark:bg-[#1E1E1E] dark:text-slate-100',
-            error ? 'border-rose-300 dark:border-rose-400/60' : 'border-ink-300',
+            'h-12 w-full appearance-none rounded-lg border border-border bg-input px-4 pr-10 text-base text-foreground transition-shadow',
+            'focus:border-ring focus:ring-2 focus:ring-ring/30 focus:outline-none',
+            error ? 'border-destructive/60' : undefined,
             className,
           )}
           {...rest}
@@ -50,13 +49,13 @@ export function Select({ label, options, placeholder, error, className, id, ...r
             </option>
           ))}
         </select>
-        <ChevronDown
+        <ArrowDown01Icon
           aria-hidden
-          className="pointer-events-none absolute right-3.5 top-1/2 size-5 -translate-y-1/2 text-ink-400"
+          className="pointer-events-none absolute right-3.5 top-1/2 size-5 -translate-y-1/2 text-muted-foreground"
         />
       </div>
       {error && (
-        <p role="alert" className="mt-1.5 text-sm text-rose-600">
+        <p role="alert" className="mt-1.5 text-sm text-destructive">
           {error}
         </p>
       )}

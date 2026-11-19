@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { Cancel01Icon } from 'hugeicons-react'
 import type { ReactNode } from 'react'
 import { cn } from '../../utils/cn'
 
@@ -36,7 +36,7 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
             aria-label="Close"
             className="flex size-8 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 dark:text-slate-400 dark:hover:bg-white/10"
           >
-            <X aria-hidden className="size-5" />
+            <Cancel01Icon aria-hidden className="size-5" />
           </button>
         </div>
         {children}

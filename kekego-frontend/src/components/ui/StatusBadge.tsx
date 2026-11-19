@@ -40,10 +40,20 @@ function groupTone(status: GroupStatus): 'amber' | 'teal' | 'blue' | 'violet' | 
   }
 }
 
-function tripTone(status: TripStatus): 'teal' | 'green' | 'rose' {
-  if (status === 'COMPLETED') return 'green'
-  if (status === 'CANCELLED') return 'rose'
-  return 'teal'
+function tripTone(status: TripStatus): 'amber' | 'teal' | 'blue' | 'green' | 'rose' {
+  switch (status) {
+    case 'PENDING':
+      return 'amber'
+    case 'DRIVER_ASSIGNED':
+    case 'DRIVER_ACCEPTED':
+      return 'blue'
+    case 'IN_PROGRESS':
+      return 'teal'
+    case 'COMPLETED':
+      return 'green'
+    case 'CANCELLED':
+      return 'rose'
+  }
 }
 
 export function GroupStatusBadge({ status, className }: { status: GroupStatus; className?: string }) {
