@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Banknote, Building2, Check, CheckCircle2, Copy, Wallet } from 'lucide-react'
+import { Money01Icon, Building02Icon, Tick01Icon, CheckmarkCircle02Icon, Copy01Icon, Wallet01Icon } from 'hugeicons-react'
 import { cn } from '../../utils/cn'
 import { formatCurrency } from '../../utils/format'
 import { Card } from '../ui/Card'
@@ -64,7 +64,7 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
           </div>
         ) : (
           <div className="mt-3 flex items-start gap-3 rounded-2xl bg-brand-50 p-4 dark:bg-brand-500/10">
-            <CheckCircle2 aria-hidden className="mt-0.5 size-5 shrink-0 text-brand-700 dark:text-brand-300" />
+            <CheckmarkCircle02Icon aria-hidden className="mt-0.5 size-5 shrink-0 text-brand-700 dark:text-brand-300" />
             <div>
               <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">
                 {formatCurrency(payment.amount)} settled
@@ -93,9 +93,9 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
     }
   }
 
-  const options: { value: PaymentMethod; label: string; hint: string; icon: typeof Banknote }[] = [
-    { value: 'CASH', label: 'Cash', hint: 'Pay the driver directly', icon: Banknote },
-    { value: 'BANK_TRANSFER', label: 'Direct bank transfer', hint: 'Send from your banking app', icon: Building2 },
+  const options: { value: PaymentMethod; label: string; hint: string; icon: typeof Money01Icon }[] = [
+    { value: 'CASH', label: 'Cash', hint: 'Pay the driver directly', icon: Money01Icon },
+    { value: 'BANK_TRANSFER', label: 'Direct bank transfer', hint: 'Send from your banking app', icon: Building02Icon },
   ]
 
   return (
@@ -112,7 +112,7 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
             </p>
           )}
         </div>
-        <Wallet aria-hidden className="size-5 shrink-0 text-ink-300 dark:text-slate-600" />
+        <Wallet01Icon aria-hidden className="size-5 shrink-0 text-ink-300 dark:text-slate-600" />
       </div>
 
       <fieldset className="mt-4">
@@ -169,7 +169,7 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
                       : 'border-ink-300 dark:border-slate-600',
                   )}
                 >
-                  {method === option.value && !disabled && <Check aria-hidden className="size-3" />}
+                  {method === option.value && !disabled && <Tick01Icon aria-hidden className="size-3" />}
                 </span>
               </label>
             )
@@ -205,7 +205,7 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
       {error && <Alert tone="error" className="mt-4">{error}</Alert>}
 
       <Button size="lg" fullWidth className="mt-4" loading={busy} onClick={handlePay}>
-        <CheckCircle2 aria-hidden className="size-4" />
+        <CheckmarkCircle02Icon aria-hidden className="size-4" />
         {method === 'CASH' ? "I've paid the driver in cash" : "I've sent the transfer"}
       </Button>
       <p className="mt-2.5 text-center text-xs text-ink-400 dark:text-slate-500">
@@ -240,7 +240,7 @@ function CopyAccountNumber({ accountNumber }: { accountNumber: string }) {
 
   return (
     <Button variant="outline" fullWidth className="mt-3.5" onClick={() => void handleCopy()}>
-      {copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}
+      {copied ? <Tick01Icon aria-hidden className="size-4" /> : <Copy01Icon aria-hidden className="size-4" />}
       {copied ? 'Account number copied' : 'Copy Account Number'}
     </Button>
   )
