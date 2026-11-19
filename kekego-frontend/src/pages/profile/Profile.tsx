@@ -1,18 +1,7 @@
 ﻿import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  GraduationCap,
-  Pencil,
-  Bell,
-  HelpCircle,
-  LogOut,
-  Mail,
-  Phone,
-  BookOpen,
-  Building2,
-  Moon,
-} from 'lucide-react'
+import { GraduationScrollIcon, PencilIcon, Notification01Icon, HelpCircleIcon, Logout01Icon, Mail01Icon, Call02Icon, BookOpen01Icon, Building02Icon, Moon01Icon } from 'hugeicons-react'
 import { useAuth } from '../../context/AuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -89,17 +78,17 @@ export function Profile() {
   }
 
   const rows = [
-    { icon: BookOpen, label: 'Department', value: student.department },
-    { icon: Building2, label: 'Faculty', value: student.faculty },
-    { icon: GraduationCap, label: 'Level', value: student.level ? `${student.level} Level` : '' },
-    { icon: Mail, label: 'Email', value: student.email },
-    { icon: Phone, label: 'Phone', value: student.phone },
+    { icon: BookOpen01Icon, label: 'Department', value: student.department },
+    { icon: Building02Icon, label: 'Faculty', value: student.faculty },
+    { icon: GraduationScrollIcon, label: 'Level', value: student.level ? `${student.level} Level` : '' },
+    { icon: Mail01Icon, label: 'Email', value: student.email },
+    { icon: Call02Icon, label: 'Phone', value: student.phone },
   ]
 
   const actions = [
-    { icon: Pencil, label: 'Edit Profile', onClick: openEdit },
-    { icon: Bell, label: 'Notification Settings', onClick: () => setNotice('Notification preferences are coming soon.') },
-    { icon: HelpCircle, label: 'Help & Support', onClick: () => setNotice('Our help centre is coming soon.') },
+    { icon: PencilIcon, label: 'Edit Profile', onClick: openEdit },
+    { icon: Notification01Icon, label: 'Notification Settings', onClick: () => setNotice('Notification preferences are coming soon.') },
+    { icon: HelpCircleIcon, label: 'Help & Support', onClick: () => setNotice('Our help centre is coming soon.') },
   ]
 
   return (
@@ -156,7 +145,7 @@ export function Profile() {
             {action.label === 'Notification Settings' && (
               <div className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-sm font-medium text-ink-800 dark:text-slate-200">
                 <span className="flex items-center gap-3">
-                  <Moon aria-hidden className="size-4.5 shrink-0 text-ink-400 dark:text-slate-500" />
+                  <Moon01Icon aria-hidden className="size-4.5 shrink-0 text-ink-400 dark:text-slate-500" />
                   Dark Mode
                 </span>
                 <ThemeToggle />
@@ -169,7 +158,7 @@ export function Profile() {
           onClick={() => setConfirmLogout(true)}
           className="flex w-full items-center gap-3 px-5 py-3.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
         >
-          <LogOut aria-hidden className="size-4.5 shrink-0" />
+          <Logout01Icon aria-hidden className="size-4.5 shrink-0" />
           Logout
         </button>
       </section>
