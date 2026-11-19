@@ -1,4 +1,4 @@
-import { Sparkles, Wallet } from 'lucide-react'
+import { SparklesIcon, Wallet01Icon } from 'hugeicons-react'
 import { useApp } from '../../context/AppContext'
 import { AppHeader } from '../../components/navigation/AppHeader'
 import { Card } from '../../components/ui/Card'
@@ -20,10 +20,10 @@ export function WalletPage() {
       <div className="flex flex-col gap-5 pb-10 pt-3">
         <Card className="p-6 text-center">
           <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-brand-50 dark:bg-brand-500/10">
-            <Wallet aria-hidden className="size-7 text-brand-700 dark:text-brand-300" />
+            <Wallet01Icon aria-hidden className="size-7 text-brand-700 dark:text-brand-300" />
           </span>
           <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-            <Sparkles aria-hidden className="size-3.5" />
+            <SparklesIcon aria-hidden className="size-3.5" />
             Coming soon
           </span>
           <h2 className="mt-3 text-xl font-bold text-ink-900 dark:text-slate-100">Wallet is not live yet</h2>

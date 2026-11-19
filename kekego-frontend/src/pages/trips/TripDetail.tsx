@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, Lock, MapPin, Star, X } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { CheckmarkCircle02Icon, LockIcon, MapPinIcon, StarIcon, Cancel01Icon } from 'hugeicons-react'
 import { useApp } from '../../context/AppContext'
 import { AppHeader } from '../../components/navigation/AppHeader'
 import { Button } from '../../components/ui/Button'
@@ -14,6 +15,7 @@ import { RatingStars } from '../../components/driver/RatingStars'
 import { ManualPaymentCard } from '../../components/payment/ManualPaymentCard'
 import { Input } from '../../components/ui/Input'
 import { isTripCancellationLocked } from '../../utils/rideStatus'
+import { formatCurrency } from '../../utils/format'
 import type { PaymentMethod, Trip } from '../../types'
 
 export function TripDetail() {
@@ -40,6 +42,7 @@ export function TripDetail() {
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const reduce = useReducedMotion()
 
   if (!trip) {
     return (
@@ -47,7 +50,7 @@ export function TripDetail() {
         <AppHeader title="Trip" />
         <div className="pt-3">
           <EmptyState
-            icon={CheckCircle2}
+            icon={CheckmarkCircle02Icon}
             title="Trip not found"
             description="We could not find this trip in your history."
             action={<Button to="/trips">View Trips</Button>}
@@ -105,7 +108,7 @@ export function TripDetail() {
         <div className="pt-3">
           <Card className="p-6 text-center">
             <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-rose-50 dark:bg-rose-500/15">
-              <X aria-hidden className="size-7 text-rose-600 dark:text-rose-300" />
+              <Cancel01Icon aria-hidden className="size-7 text-rose-600 dark:text-rose-300" />
             </span>
             <h2 className="mt-4 text-lg font-bold text-ink-900 dark:text-slate-100">Trip cancelled</h2>
             <RouteIndicator pickup={trip.pickup} destination={trip.destination} className="mt-2 justify-center" size="sm" />
@@ -126,7 +129,7 @@ export function TripDetail() {
         <div className="flex flex-col gap-5 pb-10 pt-3">
           <Card className="p-5 text-center">
             <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-brand-50 dark:bg-brand-500/10">
-              <CheckCircle2 aria-hidden className="size-8 text-brand-700 dark:text-brand-300" />
+              <CheckmarkCircle02Icon aria-hidden className="size-8 text-brand-700 dark:text-brand-300" />
             </span>
             <h2 className="mt-4 text-xl font-bold text-ink-900 dark:text-slate-100">Trip Completed</h2>
             <RouteIndicator pickup={trip.pickup} destination={trip.destination} className="mt-2 justify-center" size="sm" />
@@ -150,7 +153,7 @@ export function TripDetail() {
               {formError && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-300">{formError}</p>}
               <div className="mt-4 flex flex-col gap-2.5">
                 <Button size="lg" fullWidth loading={submittingRating} onClick={handleSubmitRating}>
-                  <Star aria-hidden className="size-4 fill-current" />
+                  <StarIcon aria-hidden className="size-4 fill-current" />
                   Submit Rating
                 </Button>
                 <Button variant="ghost" fullWidth onClick={finish}>
@@ -163,7 +166,7 @@ export function TripDetail() {
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-ink-700 dark:text-slate-300">Your rating</p>
                 <span className="inline-flex items-center gap-1 text-sm font-bold text-keke-600">
-                  <Star aria-hidden className="size-4 fill-keke-500" /> {trip.rating}
+                  <StarIcon aria-hidden className="size-4 fill-keke-500" /> {trip.rating}
                 </span>
               </div>
               {trip.comment && <p className="mt-2 text-sm text-ink-600 dark:text-slate-400">“{trip.comment}”</p>}
@@ -199,30 +202,73 @@ export function TripDetail() {
   /* ------------------------------ ACTIVE TRIPS ------------------------------ */
   return (
     <>
-      <AppHeader title={inProgress ? 'Trip in progress' : 'Driver found'} />
+      <AppHeader
+        title={`Trip ${trip.code}`}
+        right={
+          <div className="flex items-center gap-1.5">
+            {cancellationLocked && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                <LockIcon aria-hidden className="size-3" />
+                Locked
+              </span>
+            )}
+            <TripStatusBadge status={trip.status} />
+          </div>
+        }
+      />
       <div className="flex flex-col gap-5 pb-10 pt-3">
-        <Card className="p-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">Trip {trip.code}</p>
-            <div className="flex items-center gap-2">
-              {cancellationLocked && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                  <Lock aria-hidden className="size-3" />
-                  Locked
-                </span>
-              )}
-              <TripStatusBadge status={trip.status} />
+        <Card className="overflow-hidden p-0">
+          <div className="flex items-center justify-between gap-2 px-5 pt-4">
+            <p className="font-mono text-xs font-semibold uppercase tracking-widest text-ink-400 dark:text-slate-500">
+              Trip {trip.code}
+            </p>
+            <p className="font-mono text-xs tabular-nums text-ink-500 dark:text-slate-400">
+              {formatCurrency(trip.fare)} <span className="text-ink-400 dark:text-slate-500">/ seat</span>
+            </p>
+          </div>
+
+          <div className="flex items-stretch gap-3.5 px-5 py-4">
+            <div className="flex flex-col items-center" aria-hidden>
+              <span className="size-3.5 rounded-full bg-primary ring-4 ring-primary/15" />
+              <span className="relative w-px flex-1 bg-border">
+                {!reduce && (
+                  <motion.span
+                    className="absolute left-1/2 top-0 size-1.5 -translate-x-1/2 rounded-full bg-primary"
+                    animate={{ top: ['0%', '100%'] }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                )}
+              </span>
+              <span className="size-3.5 rounded-full border-2 border-primary bg-card" />
             </div>
+            <div className="flex flex-1 flex-col justify-between gap-5 py-0.5">
+              <div>
+                <p className="text-[15px] font-bold leading-snug text-ink-900 dark:text-slate-100">{trip.pickup.name}</p>
+                <p className="mt-0.5 font-mono text-xs text-ink-400 dark:text-slate-500">Pickup point</p>
+              </div>
+              <div>
+                <p className="text-[15px] font-bold leading-snug text-ink-900 dark:text-slate-100">{trip.destination.name}</p>
+                <p className="mt-0.5 font-mono text-xs text-ink-400 dark:text-slate-500">Destination</p>
+              </div>
+            </div>
+            <p className="self-start font-mono text-xs tabular-nums text-ink-500 dark:text-slate-400">
+              {trip.passengerCount ?? 0} seats
+            </p>
           </div>
-          <RouteIndicator pickup={trip.pickup} destination={trip.destination} className="mt-2" />
-          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-500/10 px-3 py-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
-            Passengers <strong>{trip.passengerCount ?? 0}</strong>
+
+          <div className="flex items-center gap-2.5 border-t border-border bg-muted px-5 py-3">
+            <span aria-hidden className="relative flex size-2 shrink-0">
+              {!reduce && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+              )}
+              <span className="relative inline-flex size-2 rounded-full bg-primary" />
+            </span>
+            <p className="text-sm font-medium text-ink-700 dark:text-slate-300">
+              {inProgress
+                ? 'Your keke is on the way to the pickup point.'
+                : 'Driver is on the way to the pickup point.'}
+            </p>
           </div>
-          <p className="mt-3 text-sm text-ink-600 dark:text-slate-400">
-            {inProgress
-              ? 'Your keke is on the way to the pickup point.'
-              : 'Driver is on the way to the pickup point.'}
-          </p>
         </Card>
 
         {driver && <DriverCard driver={driver} onCall={handleCall} />}
@@ -261,18 +307,18 @@ export function TripDetail() {
             </div>
           </Card>
         ) : (
-          <Button
-            variant="danger"
-            size="lg"
-            fullWidth
-            onClick={() => {
-              setFormError(null)
-              setConfirmCancel(true)
-            }}
-          >
-            <X aria-hidden className="size-4" />
-            Cancel Trip
-          </Button>
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                setFormError(null)
+                setConfirmCancel(true)
+              }}
+              className="min-h-11 rounded-lg px-4 text-sm font-semibold text-destructive/70 transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              Cancel trip
+            </button>
+          </div>
         )}
       </div>
     </>
@@ -292,7 +338,7 @@ function CancellationLockedNotice({ status }: { status: Trip['status'] }) {
     <Card className="border-amber-200 bg-amber-50/70 p-5 dark:border-amber-500/30 dark:bg-amber-500/10">
       <div className="flex items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
-          <Lock aria-hidden className="size-5" />
+          <LockIcon aria-hidden className="size-5" />
         </span>
         <div>
           <p className="text-sm font-bold text-amber-900 dark:text-amber-200">Cancellation locked</p>
@@ -327,11 +373,11 @@ function RouteProgress({
       <div className="mt-4 flex items-stretch gap-3.5">
         <div className="flex flex-col items-center">
           <span className="flex size-9 items-center justify-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-            <MapPin aria-hidden className="size-4.5" />
+            <MapPinIcon aria-hidden className="size-4.5" />
           </span>
           <span aria-hidden className="w-0.5 flex-1 border-l-2 border-dashed border-ink-300 dark:border-slate-700" />
           <span className="flex size-9 items-center justify-center rounded-full bg-ink-900 text-white">
-            <MapPin aria-hidden className="size-4.5" />
+            <MapPinIcon aria-hidden className="size-4.5" />
           </span>
         </div>
         <div className="flex flex-1 flex-col justify-between py-1.5">
