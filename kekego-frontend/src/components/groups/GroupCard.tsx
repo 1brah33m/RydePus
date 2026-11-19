@@ -1,4 +1,4 @@
-import { Users } from 'lucide-react'
+import { UserGroupIcon } from 'hugeicons-react'
 import type { Group } from '../../types'
 import { timeAgo } from '../../utils/format'
 import { Badge } from '../ui/Badge'
@@ -25,7 +25,7 @@ export function GroupCard({ group, onJoin, joining = false }: GroupCardProps) {
       </div>
 
       <div className="mt-3 flex items-center gap-2 text-sm text-ink-600 dark:text-slate-400">
-        <Users aria-hidden className="size-4 text-ink-400 dark:text-slate-500" />
+        <UserGroupIcon aria-hidden className="size-4 text-ink-400 dark:text-slate-500" />
         <span className="font-medium text-ink-800 dark:text-slate-200">
           {occupied}/{group.maxSize} passengers
         </span>

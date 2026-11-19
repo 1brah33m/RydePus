@@ -1,4 +1,4 @@
-import { LogOut, Users, Lock } from 'lucide-react'
+import { Logout01Icon, UserGroupIcon, LockIcon } from 'hugeicons-react'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
 
@@ -34,7 +34,7 @@ export function MembershipBlockModal({
         <>
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
-              <Lock aria-hidden className="size-5" />
+              <LockIcon aria-hidden className="size-5" />
             </span>
             <p className="text-sm leading-relaxed text-ink-600 dark:text-slate-300">{warning}</p>
           </div>
@@ -48,7 +48,7 @@ export function MembershipBlockModal({
         <>
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
-              <Users aria-hidden className="size-5" />
+              <UserGroupIcon aria-hidden className="size-5" />
             </span>
             <p className="text-sm leading-relaxed text-ink-600 dark:text-slate-300">
               You are already part of an active group{code ? ` (${code})` : ''}. You must leave your current group
@@ -61,7 +61,7 @@ export function MembershipBlockModal({
               View My Group
             </Button>
             <Button size="lg" fullWidth variant="outline" loading={leaving} disabled={leaving} onClick={onLeaveGroup}>
-              <LogOut aria-hidden className="size-4" />
+              <Logout01Icon aria-hidden className="size-4" />
               Leave Current Group
             </Button>
           </div>

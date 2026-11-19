@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, CreditCard } from 'lucide-react'
+import { CheckmarkCircle02Icon, CircleIcon, CreditCardIcon } from 'hugeicons-react'
 import { cn } from '../../utils/cn'
 import type { GroupMember } from '../../types'
 
@@ -33,11 +33,11 @@ export function PassengerSlots({
         return (
           <li key={member?.id ?? (isPaid ? `paid-${row?.index ?? i}` : `empty-${i}`)} className="flex items-center gap-2.5 py-2">
             {isPaid ? (
-              <CreditCard aria-hidden className="size-5 shrink-0 text-brand-600 dark:text-brand-400" />
+              <CreditCardIcon aria-hidden className="size-5 shrink-0 text-brand-600 dark:text-brand-400" />
             ) : member ? (
-              <CheckCircle2 aria-hidden className="size-5 shrink-0 text-brand-600 dark:text-brand-400" />
+              <CheckmarkCircle02Icon aria-hidden className="size-5 shrink-0 text-brand-600 dark:text-brand-400" />
             ) : (
-              <Circle aria-hidden className="size-5 shrink-0 text-ink-300 dark:text-slate-600" />
+              <CircleIcon aria-hidden className="size-5 shrink-0 text-ink-300 dark:text-slate-600" />
             )}
             <span
               className={cn(
