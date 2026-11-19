@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react'
+import { StarIcon } from 'hugeicons-react'
 import { cn } from '../../utils/cn'
 
 interface RatingStarsProps {
@@ -38,7 +38,7 @@ export function RatingStars({ value, onChange, size = 'md', label = 'Rating' }: 
             sizeClasses[size],
           )}
         >
-          <Star
+          <StarIcon
             aria-hidden
             className={cn('size-full', sizeClasses[size])}
             fill={n <= Math.round(value) ? 'currentColor' : 'none'}

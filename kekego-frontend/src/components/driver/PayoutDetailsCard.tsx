@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Building2, Check, Pencil } from 'lucide-react'
+import { Building02Icon, Tick01Icon, PencilIcon } from 'hugeicons-react'
 import type { PayoutDetails } from '../../services/driverService'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
@@ -66,7 +66,7 @@ export function PayoutDetailsCard({ initial, hasPayoutDetails, onSave }: PayoutD
     <Card className="p-5">
       <div className="flex items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-          <Building2 aria-hidden className="size-5" />
+          <Building02Icon aria-hidden className="size-5" />
         </span>
         <div>
           <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Payout account</h2>
@@ -92,7 +92,7 @@ export function PayoutDetailsCard({ initial, hasPayoutDetails, onSave }: PayoutD
             <SavedField label="Account name" value={savedAccountName} />
           </dl>
           <Button type="button" variant="outline" size="lg" fullWidth className="mt-4" onClick={startEditing}>
-            <Pencil aria-hidden className="size-4" />
+            <PencilIcon aria-hidden className="size-4" />
             Edit Bank Details
           </Button>
         </>
@@ -133,7 +133,7 @@ export function PayoutDetailsCard({ initial, hasPayoutDetails, onSave }: PayoutD
           )}
 
           <Button type="submit" size="lg" fullWidth loading={busy} className="mt-4">
-            <Check aria-hidden className="size-4" />
+            <Tick01Icon aria-hidden className="size-4" />
             {hasPayoutDetails ? 'Update payout account' : 'Save payout account'}
           </Button>
 

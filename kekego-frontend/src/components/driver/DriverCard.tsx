@@ -1,4 +1,4 @@
-import { Phone, Star, Truck } from 'lucide-react'
+import { Call02Icon, StarIcon, TruckIcon } from 'hugeicons-react'
 import type { Driver } from '../../types'
 import { Badge } from '../ui/Badge'
 import { Card } from '../ui/Card'
@@ -14,13 +14,13 @@ export function DriverCard({ driver, onCall, callLoading = false }: DriverCardPr
     <Card className="p-4">
       <div className="flex items-center gap-3.5">
         <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-          <Truck aria-hidden className="size-6" />
+          <TruckIcon aria-hidden className="size-6" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-semibold text-ink-900 dark:text-slate-100">{driver.name}</p>
           <div className="mt-0.5 flex items-center gap-2 text-sm text-ink-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1">
-              <Star aria-hidden className="size-3.5 fill-keke-500 text-keke-500" />
+              <StarIcon aria-hidden className="size-3.5 fill-keke-500 text-keke-500" />
               {driver.rating.toFixed(1)}
             </span>
             <span aria-hidden>·</span>
@@ -54,7 +54,7 @@ export function DriverCard({ driver, onCall, callLoading = false }: DriverCardPr
           disabled={callLoading}
           className="mt-3.5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-ink-300 bg-white text-sm font-semibold text-ink-800 transition-colors hover:border-brand-500 hover:text-brand-700 disabled:opacity-50 dark:border-slate-700 dark:bg-[#1E1E1E] dark:text-slate-200 dark:hover:border-brand-400 dark:hover:text-brand-300"
         >
-          <Phone aria-hidden className="size-4" />
+          <Call02Icon aria-hidden className="size-4" />
           {callLoading ? 'Calling…' : 'Call Driver'}
         </button>
       )}
