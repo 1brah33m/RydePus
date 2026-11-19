@@ -2,6 +2,7 @@ import pytest
 from rest_framework import status
 
 from apps.groups.models import Group, GroupMember
+from apps.payments.models import Payment
 from apps.trips.models import Trip
 from apps.users.models import User
 
@@ -462,6 +463,144 @@ def test_group_creation_with_all_four_seats_is_dispatchable(student_client):
     assert body["seats_filled"] == 4
     assert body["remaining_seats"] == 0
     assert body["status"] == Group.Status.FULL
+
+
+@pytest.mark.django_db
+def test_joining_with_a_seat_count_reserves_that_many_seats(student_user):
+    group = Group.objects.create(
+        name="Bring Friends",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+
+    joiner = User.objects.create_user(
+        email="withfriends@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+
+    response = client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 2}, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    # Two seats claimed: the joiner's own plus one carried passenger.
+    assert body["member_count"] == 2
+    assert body["seats_filled"] == 3
+    assert body["remaining_seats"] == 1
+
+    assert GroupMember.objects.filter(group=group, user=joiner).exists()
+    payment = Payment.objects.get(group=group, payer=joiner, kind=Payment.Kind.GROUP_BUYOUT)
+    assert payment.seats == 1
+    # One consolidated charge: own seat + one carried seat.
+    assert payment.amount == group.fare_per_seat * 2
+
+
+@pytest.mark.django_db
+def test_join_defaults_to_a_single_seat(student_user):
+    group = Group.objects.create(
+        name="Solo Join",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+
+    joiner = User.objects.create_user(
+        email="solojoin@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+
+    response = client.post(f"{GROUPS_URL}{group.id}/join/", format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["seats_filled"] == 2
+    assert body["remaining_seats"] == 2
+    # A solo joiner carries nobody, so no seat commitment is recorded.
+    assert not Payment.objects.filter(group=group, payer=joiner).exists()
+
+
+@pytest.mark.django_db
+def test_joining_cannot_overflow_capacity(student_user):
+    group = Group.objects.create(
+        name="Nearly Full",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    # Three of four seats taken, so only one remains.
+    for index in range(2):
+        GroupMember.objects.create(
+            group=group,
+            user=User.objects.create_user(
+                email=f"already{index}@example.com",
+                password="StrongPass123!",
+                role=User.Role.STUDENT,
+            ),
+        )
+    group.refresh_status()
+
+    joiner = User.objects.create_user(
+        email="overflow@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+
+    response = client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 2}, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["error"]["code"] == "INVALID"
+    # Nothing was allocated: no membership, no seat commitment, seats unchanged.
+    assert not GroupMember.objects.filter(group=group, user=joiner).exists()
+    assert not Payment.objects.filter(group=group, payer=joiner).exists()
+    group.refresh_from_db()
+    assert group.seats_filled == 3
+
+
+@pytest.mark.django_db
+def test_joining_enough_seats_to_fill_the_group_dispatches(student_user):
+    group = Group.objects.create(
+        name="Fill On Join",
+        pickup_location="East Gate",
+        destination="Library",
+        pickup_lat="6.524400",
+        pickup_lng="3.379200",
+        destination_lat="6.530000",
+        destination_lng="3.390000",
+        capacity=4,
+        created_by=student_user,
+    )
+
+    joiner = User.objects.create_user(
+        email="filljoin@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+
+    # One member (the creator) plus three claimed seats fills the keke.
+    response = client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 3}, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["seats_filled"] == 4
+    assert response.json()["status"] == Group.Status.FULL
+
+    group.refresh_from_db()
+    assert group.status == Group.Status.FULL
+    trip = Trip.objects.get(group=group)
+    assert trip.status == Trip.Status.PENDING
+    assert trip.driver_id is None
 
 
 @pytest.mark.django_db

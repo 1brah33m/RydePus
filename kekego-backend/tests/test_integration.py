@@ -1,8 +1,8 @@
 """Cross-app integration flows driven entirely through the public HTTP API.
 
-These exercises mirror a real student session: create a group, a second
-student joins, a trip is published, a driver accepts and completes it, the
-student pays (provider webhook), and everyone's state lines up at the end.
+These exercises mirror a real student session: create a group, fill its seats,
+watch the ride get dispatched, a driver accepts and completes it, the student
+pays (provider webhook), and everyone's state lines up at the end.
 """
 
 import pytest
@@ -72,20 +72,11 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     assert group.member_count == 4
     assert group.is_dispatchable is True
 
-    # 3. Student A publishes a trip for the group.
-    trip_resp = student_client.post(
-        TRIPS_URL,
-        {
-            "group": group_id,
-            "pickup_location": "Main Gate",
-            "destination": "Library",
-            "fare": 200,
-        },
-        format="json",
-    )
-    assert trip_resp.status_code == status.HTTP_201_CREATED
-    trip_id = trip_resp.json()["id"]
-    assert trip_resp.json()["status"] == "PENDING"
+    # 3. Filling the last seat dispatched a trip automatically; the student no
+    #    longer has to publish it by hand.
+    trip = Trip.objects.get(group_id=group_id)
+    assert trip.status == Trip.Status.PENDING
+    trip_id = trip.id
 
     # 4. Driver goes online, discovers the trip, and accepts it.
     DriverProfile.objects.update_or_create(
@@ -120,7 +111,7 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     #    no provider to call and no driver to confirm receipt.
     pay_resp = student_client.post(
         PAYMENTS_URL,
-        {"trip": trip_id, "amount": 200, "currency": "NGN", "method": Payment.Method.CASH},
+        {"trip": trip_id, "amount": str(trip.fare), "currency": "NGN", "method": Payment.Method.CASH},
         format="json",
     )
     assert pay_resp.status_code == status.HTTP_201_CREATED
@@ -132,7 +123,7 @@ def test_full_ride_flow_end_to_end(student_user, student_client, driver_user):
     # The fare must be settled exactly; a short payment is rejected.
     short_pay = student_client.post(
         PAYMENTS_URL,
-        {"trip": trip_id, "amount": 100, "currency": "NGN", "method": Payment.Method.CASH},
+        {"trip": trip_id, "amount": str(trip.fare - 1), "currency": "NGN", "method": Payment.Method.CASH},
         format="json",
     )
     assert short_pay.status_code == status.HTTP_400_BAD_REQUEST
