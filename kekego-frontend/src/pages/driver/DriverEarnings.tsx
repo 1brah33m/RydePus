@@ -1,4 +1,4 @@
-import { Banknote, CalendarDays, ChevronRight, CreditCard } from 'lucide-react'
+import { Money01Icon, Calendar01Icon, ArrowRight01Icon, CreditCardIcon } from 'hugeicons-react'
 import { DriverShell } from '../../components/navigation/DriverShell'
 import { OnlineToggle } from '../../components/driver/OnlineToggle'
 import { useDriverRide } from '../../hooks/useDriverRide'
@@ -51,7 +51,7 @@ export function DriverEarnings() {
               <span aria-hidden className="absolute -right-10 -top-10 size-36 rounded-full bg-brand-500/10 blur-2xl dark:bg-brand-500/15" />
               <div className="relative">
                 <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
-                  <CreditCard aria-hidden className="size-3.5" />
+                  <CreditCardIcon aria-hidden className="size-3.5" />
                   This week
                 </p>
                 <p className="mt-2 text-3xl font-bold tracking-tight">{formatCurrency(weekTotal)}</p>
@@ -66,7 +66,7 @@ export function DriverEarnings() {
               <div className="flex items-center justify-between">
                 <p className="text-sm font-bold">This week</p>
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400">
-                  <CalendarDays aria-hidden className="size-3.5" />
+                  <Calendar01Icon aria-hidden className="size-3.5" />
                   {weekTrips} trip{weekTrips === 1 ? '' : 's'}
                 </span>
               </div>
@@ -98,13 +98,13 @@ export function DriverEarnings() {
         <section aria-label="Earnings breakdown">
           <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200/70 bg-white shadow-sm dark:divide-white/5 dark:border-slate-800 dark:bg-[#1E1E1E]">
             <BreakdownRow
-              icon={Banknote}
+              icon={Money01Icon}
               title="Completed rides"
               subtitle={`${completed.length} lifetime trip${completed.length === 1 ? '' : 's'}`}
               value={formatCurrency(completedTotal)}
             />
             <BreakdownRow
-              icon={CalendarDays}
+              icon={Calendar01Icon}
               title="This week"
               subtitle={`${weekTrips} trip${weekTrips === 1 ? '' : 's'} this week`}
               value={formatCurrency(weekTotal)}
@@ -115,7 +115,7 @@ export function DriverEarnings() {
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-4 text-base font-bold text-white transition-transform active:scale-[0.98]"
           >
             Withdraw Earnings
-            <ChevronRight aria-hidden className="size-5" />
+            <ArrowRight01Icon aria-hidden className="size-5" />
           </button>
           <p className="mt-3 text-center text-[11px] text-ink-500 dark:text-slate-500">
             {profile?.vehicle_plate || 'No plate set'} · {history.length} lifetime trips
@@ -134,7 +134,7 @@ function BreakdownRow({
   subtitle,
   value,
 }: {
-  icon: typeof Banknote
+  icon: typeof Money01Icon
   title: string
   subtitle: string
   value: string

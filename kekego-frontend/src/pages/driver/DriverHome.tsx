@@ -1,18 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  BellRing,
-  CheckCircle2,
-  ChevronRight,
-  Clock3,
-  Map,
-  Navigation,
-  Power,
-  Star,
-  Truck,
-  Users,
-  Wallet,
-} from 'lucide-react'
+import { Notification02Icon, CheckmarkCircle02Icon, ArrowRight01Icon, Clock03Icon, MapsIcon, Navigation01Icon, ShutDownIcon, StarIcon, TruckIcon, UserGroupIcon, Wallet01Icon } from 'hugeicons-react'
 import { formatCurrency } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import type { Trip } from '../../types'
@@ -101,21 +89,21 @@ export function DriverHome() {
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Trips</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-lg font-bold">
-                  <CheckCircle2 aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
+                  <CheckmarkCircle02Icon aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
                   {history.length} done
                 </dd>
               </div>
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Queue</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-lg font-bold">
-                  <Clock3 aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
+                  <Clock03Icon aria-hidden className="size-4 text-brand-600 dark:text-brand-400" />
                   {requests.length} new
                 </dd>
               </div>
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-400 dark:text-slate-500">Rating</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-lg font-bold">
-                  <Star aria-hidden className="size-4 fill-keke-500 text-keke-500" />
+                  <StarIcon aria-hidden className="size-4 fill-keke-500 text-keke-500" />
                   {ratingLabel}
                 </dd>
               </div>
@@ -150,14 +138,14 @@ export function DriverHome() {
           <h2 className="text-base font-bold tracking-tight">Quick actions</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3">
             <QuickActionCard
-              icon={Truck}
+              icon={TruckIcon}
               title="Vehicle & Permit"
               subtitle={`${profile?.vehicle_plate || 'No plate set'} · ${profile?.vehicle_type || 'Keke'}`}
               meta="Permit Verified"
               metaClassName="bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400"
             />
             <QuickActionCard
-              icon={Wallet}
+              icon={Wallet01Icon}
               title="Earnings Payout"
               subtitle="Payout history"
               meta={`${formatCurrency(completedTotal)} ready`}
@@ -165,7 +153,7 @@ export function DriverHome() {
               onClick={() => navigate('/driver/earnings')}
             />
             <QuickActionCard
-              icon={Map}
+              icon={MapsIcon}
               title="Campus Zone Hotspots"
               subtitle="High-demand pickup map guide"
               className="col-span-2 lg:col-span-1"
@@ -210,7 +198,7 @@ function RideRequestCard({
       </p>
 
       <p className="relative mt-2 inline-flex items-center gap-1 text-sm font-medium text-white/90">
-        <Users aria-hidden className="size-4" />
+        <UserGroupIcon aria-hidden className="size-4" />
         {trip.passengerCount ?? 1} passenger{trip.passengerCount && trip.passengerCount > 1 ? 's' : ''} pooled
       </p>
 
@@ -228,7 +216,7 @@ function RideRequestCard({
             className="inline-flex h-13 flex-1 items-center justify-center gap-2 rounded-2xl bg-charcoal px-5 text-base font-bold text-white shadow-lg transition-transform active:scale-[0.98]"
           >
             Accept Ride
-            <ChevronRight aria-hidden className="size-5" />
+            <ArrowRight01Icon aria-hidden className="size-5" />
           </button>
           <button
             type="button"
@@ -236,7 +224,7 @@ function RideRequestCard({
             className="inline-flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-sm transition-transform active:scale-[0.98]"
             aria-label="View all requests"
           >
-            <BellRing aria-hidden className="size-5" />
+            <Notification02Icon aria-hidden className="size-5" />
           </button>
         </div>
       </div>
@@ -262,7 +250,7 @@ function ActiveRideCard({
       className="rounded-3xl border border-brand-200 bg-white p-5 shadow-sm dark:border-brand-500/30 dark:bg-[#1E1E1E]"
     >
       <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400">
-        <BellRing aria-hidden className="size-4" />
+        <Notification02Icon aria-hidden className="size-4" />
         <p className="text-xs font-bold uppercase tracking-widest">
           {waitingToStart ? 'Ride assigned — waiting to start' : 'Ride in progress'}
         </p>
@@ -284,7 +272,7 @@ function ActiveRideCard({
             waitingToStart ? 'text-amber-600 dark:text-amber-400' : 'text-brand-600 dark:text-brand-400',
           )}
         >
-          <Clock3 aria-hidden className="size-4" />
+          <Clock03Icon aria-hidden className="size-4" />
           {waitingToStart ? 'Assigned' : 'In progress'}
         </span>
       </div>
@@ -296,7 +284,7 @@ function ActiveRideCard({
           disabled={busy}
           className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
         >
-          <Navigation aria-hidden className="size-4.5" />
+          <Navigation01Icon aria-hidden className="size-4.5" />
           {busy ? 'Starting…' : 'Start Ride'}
         </button>
       ) : (
@@ -306,7 +294,7 @@ function ActiveRideCard({
           disabled={busy}
           className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
         >
-          <CheckCircle2 aria-hidden className="size-4.5" />
+          <CheckmarkCircle02Icon aria-hidden className="size-4.5" />
           {busy ? 'Completing…' : 'Mark Ride Complete'}
         </button>
       )}
@@ -318,7 +306,7 @@ function WaitingCard({ onOpenQueue }: { onOpenQueue: () => void }) {
   return (
     <section aria-label="No requests" className="rounded-3xl border border-ink-200/70 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
       <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400">
-        <Map aria-hidden className="size-6" />
+        <MapsIcon aria-hidden className="size-6" />
       </span>
       <h2 className="mt-4 text-base font-bold">No ride requests right now</h2>
       <p className="mx-auto mt-1.5 max-w-60 text-sm leading-relaxed text-ink-500 dark:text-slate-400">
@@ -329,7 +317,7 @@ function WaitingCard({ onOpenQueue }: { onOpenQueue: () => void }) {
         onClick={onOpenQueue}
         className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98]"
       >
-        <BellRing aria-hidden className="size-4" />
+        <Notification02Icon aria-hidden className="size-4" />
         Open queue
       </button>
     </section>
@@ -340,7 +328,7 @@ function OfflineCard({ onGoOnline, disabled }: { onGoOnline: () => void; disable
   return (
     <section aria-label="Offline" className="rounded-3xl border border-ink-200/70 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
       <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-ink-100 text-ink-500 dark:bg-white/5 dark:text-slate-400">
-        <Power aria-hidden className="size-6" />
+        <ShutDownIcon aria-hidden className="size-6" />
       </span>
       <h2 className="mt-4 text-base font-bold">You're offline</h2>
       <p className="mx-auto mt-1.5 max-w-60 text-sm leading-relaxed text-ink-500 dark:text-slate-400">
@@ -352,7 +340,7 @@ function OfflineCard({ onGoOnline, disabled }: { onGoOnline: () => void; disable
         disabled={disabled}
         className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
       >
-        <Power aria-hidden className="size-4" />
+        <ShutDownIcon aria-hidden className="size-4" />
         Go Online
       </button>
     </section>
@@ -368,7 +356,7 @@ function QuickActionCard({
   className,
   onClick,
 }: {
-  icon: typeof Truck
+  icon: typeof TruckIcon
   title: string
   subtitle: string
   meta?: string
@@ -389,7 +377,7 @@ function QuickActionCard({
         <span className="flex size-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">
           <Icon aria-hidden className="size-5" />
         </span>
-        <ChevronRight aria-hidden className="size-4 text-ink-300 transition-colors group-hover:text-brand-600 dark:text-slate-600 dark:group-hover:text-brand-400" />
+        <ArrowRight01Icon aria-hidden className="size-4 text-ink-300 transition-colors group-hover:text-brand-600 dark:text-slate-600 dark:group-hover:text-brand-400" />
       </div>
       <span>
         <span className="block text-sm font-semibold leading-tight">{title}</span>
