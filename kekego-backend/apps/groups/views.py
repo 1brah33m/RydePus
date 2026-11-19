@@ -10,6 +10,7 @@ from apps.core.pricing import total_fare
 from apps.groups.models import Group, GroupMember, MAX_GROUP_CAPACITY
 from apps.payments.models import Payment
 from apps.trips.models import Trip
+from apps.trips.services import dispatch_group
 from apps.users.permissions import IsStudent
 
 
@@ -34,6 +35,32 @@ def validate_coordinate_pair(attrs, prefix: str, errors: dict) -> None:
         errors[f"{prefix}_lat"] = "latitude must be between -90 and 90."
     if lng is not None and not (-180 <= lng <= 180):
         errors[f"{prefix}_lng"] = "longitude must be between -180 and 180."
+
+
+def _cover_seats(group, user, seats: int, currency=None):
+    """Cover ``seats`` total seats for ``user`` as one consolidated charge.
+
+    ``seats`` counts the user's own seat, so ``seats - 1`` empty seats are
+    recorded. Used both when a creator pays for extra seats up front and when a
+    joiner brings passengers along with them; either way the group's seat count
+    moves by exactly ``seats``. Priced from the group's own coordinates so a
+    client cannot underpay.
+    """
+    extra = seats - 1
+    if extra <= 0:
+        return None
+    payment = Payment.objects.create(
+        group=group,
+        payer=user,
+        amount=total_fare(group.fare_per_seat, seats),
+        currency=currency or "NGN",
+        seats=extra,
+        kind=Payment.Kind.GROUP_BUYOUT,
+        status=Payment.Status.SUCCESSFUL,
+        confirmed_at=timezone.now(),
+    )
+    group.refresh_status()
+    return payment
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -265,32 +292,19 @@ class GroupListView(APIView):
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
             group = serializer.save()
-            self._buy_creator_seats(group, request.user, serializer.requested_seats, request.data.get("currency"))
+            _cover_seats(group, request.user, serializer.requested_seats, request.data.get("currency"))
+            # A creator who pays for every seat fills the keke on creation.
+            dispatch_group(group)
         return Response(GroupSerializer(group, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
-    @staticmethod
-    def _buy_creator_seats(group, user, seats, currency=None):
-        """Cover the creator's extra seats as part of group creation.
 
-        ``seats`` counts the creator's own seat, so ``seats - 1`` empty seats are
-        bought. The amount is one consolidated charge: the creator's own seat
-        (billed once) plus those extra seats, priced from the group's own
-        coordinates so the client cannot underpay.
-        """
-        extra = seats - 1
-        if extra <= 0:
-            return
-        Payment.objects.create(
-            group=group,
-            payer=user,
-            amount=total_fare(group.fare_per_seat, seats),
-            currency=currency or "NGN",
-            seats=extra,
-            kind=Payment.Kind.GROUP_BUYOUT,
-            status=Payment.Status.SUCCESSFUL,
-            confirmed_at=timezone.now(),
-        )
-        group.refresh_status()
+class GroupJoinSerializer(serializers.Serializer):
+    """Request body for joining a group with a chosen seat count."""
+
+    #: Seats the joiner is claiming, including their own (1..remaining).
+    seats = serializers.IntegerField(default=1, min_value=1, write_only=True)
+    #: Accepted for client compatibility; the server prices the seats itself.
+    currency = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
 
 class GroupJoinView(APIView):
@@ -299,19 +313,43 @@ class GroupJoinView(APIView):
     permission_classes = [IsStudent]
 
     def post(self, request, group_id):
-        try:
-            group = Group.objects.get(pk=group_id)
-        except Group.DoesNotExist:
-            return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            try:
+                group = Group.objects.select_for_update().get(pk=group_id)
+            except Group.DoesNotExist:
+                return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
 
-        if group.members.filter(user=request.user).exists():
-            return Response({"error": {"code": "INVALID", "message": "You already joined this group."}}, status=status.HTTP_400_BAD_REQUEST)
+            if group.members.filter(user=request.user).exists():
+                return Response({"error": {"code": "INVALID", "message": "You already joined this group."}}, status=status.HTTP_400_BAD_REQUEST)
+            if not group.joinable:
+                return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not group.joinable:
-            return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
+            # The joiner claims exactly the seats they ask for (defaulting to
+            # just their own). Extra seats are a seat commitment recorded like a
+            # buyout, so the group's remaining count drops by the full amount
+            # and can never overflow past capacity.
+            body = GroupJoinSerializer(data=request.data)
+            body.is_valid(raise_exception=True)
+            seats = body.validated_data["seats"]
+            remaining = group.remaining_seats
+            if seats > remaining:
+                return Response(
+                    {
+                        "error": {
+                            "code": "INVALID",
+                            "message": f"Choose between 1 and {remaining} seat(s); this group has {remaining} empty.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        GroupMember.objects.create(group=group, user=request.user)
-        group.refresh_status()
+            GroupMember.objects.create(group=group, user=request.user)
+            _cover_seats(group, request.user, seats, body.validated_data.get("currency"))
+            group.refresh_status()
+            # Filling the last seat turns the group into a ride request at once,
+            # so the driver queue sees it without waiting on the student's client.
+            dispatch_group(group)
+
         return Response(GroupSerializer(group, context={"request": request}).data)
 
 
@@ -466,6 +504,9 @@ class GroupBuyoutView(APIView):
                 confirmed_at=timezone.now(),
             )
             group.refresh_status()
+            # A buyout that covers every remaining seat fills the keke and
+            # becomes a ride request for the driver queue right away.
+            dispatch_group(group)
 
         from apps.payments.views import PaymentSerializer
 

@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.drivers.models import DriverProfile
-from apps.groups.models import GroupMember
+from apps.groups.models import Group, GroupMember
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
 from apps.trips.models import Rating, Trip
@@ -188,7 +188,17 @@ class TripCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = self.context["request"].user
-        return Trip.objects.create(created_by=user, **validated_data)
+        # Lock the group while creating the trip so this legacy path serializes
+        # with the group-filling paths (join/buyout auto-dispatch) and a second
+        # request can never slip a duplicate trip in alongside the auto one.
+        with transaction.atomic():
+            group = validated_data["group"]
+            Group.objects.select_for_update().get(pk=group.pk)
+            if group.trip_set.filter(
+                status__in=[Trip.Status.PENDING, Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS]
+            ).exists():
+                raise serializers.ValidationError({"group": "This group already has an active trip."})
+            return Trip.objects.create(created_by=user, **validated_data)
 
 
 class TripListCreateView(APIView):
