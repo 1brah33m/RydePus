@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Users, MapPin, Armchair } from 'lucide-react'
+import { UserGroupIcon, MapPinIcon, Sofa01Icon } from 'hugeicons-react'
 import { CAMPUS_LOCATIONS } from '../../config/locations'
 import { GROUP_SEATS, groupFare, perSeatFare } from '../../config/pricing'
 import { useApp } from '../../context/AppContext'
@@ -47,14 +47,14 @@ export function CreateGroup() {
       <>
         <AppHeader title="New group" />
         <div className="flex flex-col gap-5 pb-10 pt-3">
-          <Card className="p-5">
+          <div className="rounded-3xl border border-border bg-card p-5">
             <div className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-500/10">
-                <MapPin aria-hidden className="size-5 text-brand-600 dark:text-brand-400" />
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted">
+                <MapPinIcon aria-hidden className="size-5 text-muted-foreground" />
               </span>
               <div>
-                <h1 className="text-base font-bold text-ink-900 dark:text-slate-100">Start a new group</h1>
-                <p className="text-sm text-ink-500 dark:text-slate-400">Choose your route and others can join you.</p>
+                <h1 className="text-base font-bold text-foreground">Start a new group</h1>
+                <p className="text-sm text-muted-foreground">Choose your route and others can join you.</p>
               </div>
             </div>
             <div className="mt-4">
@@ -65,7 +65,7 @@ export function CreateGroup() {
                 }
               />
             </div>
-          </Card>
+          </div>
         </div>
       </>
     )
@@ -131,7 +131,7 @@ export function CreateGroup() {
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Seats you are paying for</h2>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-500/10 px-3 py-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
-              <Armchair aria-hidden className="size-4" />
+              <Sofa01Icon aria-hidden className="size-4" />
               {seats}/{GROUP_SEATS}
             </span>
           </div>
@@ -168,7 +168,7 @@ export function CreateGroup() {
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Passengers</h2>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-500/10 px-3 py-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
-              <Users aria-hidden className="size-4" />{seats}/{GROUP_SEATS}
+              <UserGroupIcon aria-hidden className="size-4" />{seats}/{GROUP_SEATS}
             </span>
           </div>
           <div className="mt-3">
@@ -204,7 +204,7 @@ export function CreateGroup() {
 
         <div className="flex flex-col gap-3">
           <Button size="lg" fullWidth loading={busy === 'create'} onClick={handleCreate}>
-            <Users aria-hidden className="size-4" />
+            <UserGroupIcon aria-hidden className="size-4" />
             Create Group
           </Button>
           <p className="px-2 text-center text-xs text-ink-400 dark:text-slate-500">
