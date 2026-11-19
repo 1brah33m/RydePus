@@ -1,33 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Camera } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { authService } from '../../services/authService'
 import { isGoogleSignInConfigured, requestGoogleIdToken } from '../../services/googleAuth'
 import type { RegisterPayload } from '../../types'
 import { homePathForRole } from '../../utils/routing'
-import { initials } from '../../utils/nameInitials'
-import { checkPasswords } from '../../config/password'
+import { validatePassword } from '../../config/password'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
-import { DarkField, DarkSelect } from '../../components/ui/DarkField'
-import { AuthLayout } from './AuthLayout'
+import { DarkField } from '../../components/ui/DarkField'
+import { AuthSplitLayout } from '../../components/ui/AuthSplitLayout'
 import { GoogleIcon, NameAndPasswordFields } from './sharedAuth'
 
-const LEVELS = [100, 200, 300, 400, 500].map((n) => ({
-  value: String(n),
-  label: `${n}L`,
-}))
-
-const FACULTIES = [
-  'Faculty of Engineering',
-  'Faculty of Environmental Sciences',
-  'School of Agriculture',
-].map((f) => ({ value: f, label: f }))
-
-type Step = 'email' | 'profile' | 'verifying'
+type Step = 'form' | 'verifying'
 
 const EMPTY_FORM: RegisterPayload = {
   firstName: '',
@@ -43,12 +30,8 @@ type FieldErrors = Partial<
     | 'lastName'
     | 'email'
     | 'phone'
-    | 'faculty'
-    | 'department'
-    | 'level'
     | 'password'
-    | 'confirmation'
-    | 'matricNumber',
+    | 'confirmation',
     string
   >
 >
@@ -57,7 +40,7 @@ export function Register() {
   const { register, status } = useAuth()
   const navigate = useNavigate()
 
-  const [step, setStep] = useState<Step>('email')
+  const [step, setStep] = useState<Step>('form')
   const [form, setForm] = useState<RegisterPayload>(EMPTY_FORM)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [busy, setBusy] = useState(false)
@@ -68,8 +51,6 @@ export function Register() {
   const googleLinked = Boolean(form.googleIdToken)
   const googleAvailable = isGoogleSignInConfigured()
 
-  const nameInitials = useMemo(() => initials(form.firstName, form.lastName), [form.firstName, form.lastName])
-
   // Redirect if already authenticated and not on the verifying screen.
   useEffect(() => {
     if (status === 'authenticated' && step !== 'verifying') {
@@ -77,31 +58,10 @@ export function Register() {
     }
   }, [status, step, navigate])
 
-  // ----- Email / Google step ------------------------------------------------
-
-  /**
-   * Manual entry: keep the name fields empty on purpose. We no longer guess a
-   * person's name from their email address; they type it on the next step.
-   */
-  const handleNext = (e: FormEvent) => {
-    e.preventDefault()
-    const email = form.email?.trim() ?? ''
-    if (!email) {
-      setErrors((p) => ({ ...p, email: 'Enter your email address.' }))
-      return
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrors((p) => ({ ...p, email: 'Enter a valid email address.' }))
-      return
-    }
-    setErrors((p) => ({ ...p, email: undefined }))
-    setForm((p) => ({ ...p, email }))
-    setStep('profile')
-  }
-
   /**
    * Real Google sign-in. The ID token is verified by the backend, which replies
    * with the first/last name we are allowed to prefill from the Google profile.
+   * The identity is merged into the single form in place.
    */
   const handleGoogle = async () => {
     setGoogleBusy(true)
@@ -117,7 +77,6 @@ export function Register() {
         email: identity.email,
         googleIdToken: idToken,
       }))
-      setStep('profile')
     } catch (err) {
       setFormError(err instanceof Error && err.message ? err.message : 'Google sign-in failed. Try again.')
     } finally {
@@ -125,9 +84,9 @@ export function Register() {
     }
   }
 
-  // ----- Profile step -------------------------------------------------------
+  // ----- Validation ---------------------------------------------------------
 
-  const validateProfile = (): boolean => {
+  const validateForm = (): boolean => {
     const email = form.email?.trim() ?? ''
     const phoneDigits = (form.phone ?? '').replace(/\D/g, '')
     const next: FieldErrors = {}
@@ -143,23 +102,24 @@ export function Register() {
     else if (!/^0[0-9]{10}$/.test(phoneDigits)) {
       next.phone = 'Enter a valid 11-digit phone number (e.g. 08123456789).'
     }
-    if (!form.faculty?.trim()) next.faculty = 'Select your faculty.'
-    if (!form.department?.trim()) next.department = 'Enter your department.'
-    if (!form.level) next.level = 'Select your current level.'
-    Object.assign(next, checkPasswords(form.password, form.confirmPassword))
+    const passwordError = validatePassword(form.password)
+    if (passwordError) next.password = passwordError
     setErrors(next)
     return Object.values(next).every((message) => !message)
   }
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
-    if (!validateProfile()) return
+    if (!validateForm()) return
     setBusy(true)
     setFormError(null)
     setStep('verifying')
     try {
       await register({
         ...form,
+        // The confirm-password field was removed from the student form, but the
+        // backend still requires a matching `confirm_password`: mirror it.
+        confirmPassword: form.password,
         firstName: form.firstName!.trim(),
         lastName: form.lastName!.trim(),
         email: form.email!.trim().toLowerCase(),
@@ -171,7 +131,7 @@ export function Register() {
           ? err.message
           : 'We could not verify your student account. Please try again.',
       )
-      setStep('profile')
+      setStep('form')
       setBusy(false)
     }
   }
@@ -188,41 +148,48 @@ export function Register() {
     setErrors((p) => ({ ...p, firstName: undefined, lastName: undefined }))
   }
 
-  // ------- Step 1 · email / Google -------
-  const EmailStep = (
-    <div key="email" className="animate-keke-step flex flex-col">
-      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-400/40 bg-brand-400/10 px-3 py-1 text-xs font-semibold text-brand-400">
-        Join as Student · 1 of 2
-      </div>
-      <h1 className="text-[26px] font-bold tracking-tight text-white">Join Rydepus as Student</h1>
-      <p className="mt-1.5 text-sm text-ink-400">Ride with your classmates, split the fare, get there together.</p>
+  // ------- Single registration form (email + profile merged) -------
+  const Form = (
+    <div key="form" className="animate-ryde-step flex flex-col">
+      <h1 className="text-[26px] font-bold tracking-tight text-foreground">Join Rydepus as Student</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">Ride with your classmates, split the fare, get there together.</p>
 
       <div className="mt-7">
-        {googleAvailable ? (
+        {googleAvailable && (
           <button
             type="button"
             onClick={handleGoogle}
             disabled={googleBusy || busy}
-            className="flex h-13 w-full items-center justify-center gap-3 rounded-full bg-white text-sm font-semibold text-ink-900 transition hover:bg-gray-100 active:scale-[0.99] disabled:opacity-60"
+            className="btn-press flex h-13 w-full items-center justify-center gap-3 rounded-lg border border-border bg-card text-sm font-semibold text-foreground transition-all duration-200 hover:bg-accent hover:shadow-sm disabled:opacity-60"
           >
-            {googleBusy ? <Spinner size="sm" className="text-ink-400" /> : <GoogleIcon />}
+            {googleBusy ? <Spinner size="sm" className="text-muted-foreground" /> : <GoogleIcon />}
             {googleBusy ? 'Connecting to Google…' : 'Continue with Google'}
           </button>
-        ) : (
-          <p className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[13px] text-ink-500">
-            Google sign-in is not configured for this environment yet. Register with your email below.
-          </p>
         )}
 
-        <div className="my-6 flex items-center gap-3">
-          <span className="h-px flex-1 bg-white/10" />
-          <span className="text-xs font-medium uppercase tracking-wider text-ink-500">
-            {googleAvailable ? 'or' : ''}
-          </span>
-          <span className="h-px flex-1 bg-white/10" />
-        </div>
+        {googleAvailable && (
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-muted" />
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">or</span>
+            <span className="h-px flex-1 bg-muted" />
+          </div>
+        )}
 
-        <form onSubmit={handleNext} className="space-y-4" noValidate>
+        <form onSubmit={handleCreate} className="space-y-4" noValidate>
+          <NameAndPasswordFields
+            firstName={form.firstName}
+            lastName={form.lastName}
+            password={form.password}
+            hideConfirmation
+            confirmation={form.confirmPassword}
+            locked={googleLinked}
+            errors={errors}
+            onFirstName={(v) => setField('firstName', v)}
+            onLastName={(v) => setField('lastName', v)}
+            onPassword={(v) => setField('password', v)}
+            onConfirmation={(v) => setField('confirmPassword', v)}
+            onUnlockNames={unlockNames}
+          />
           <DarkField
             label="Email address"
             type="email"
@@ -232,172 +199,71 @@ export function Register() {
             value={form.email ?? ''}
             onChange={(e) => setField('email', e.target.value)}
             error={errors.email}
+            readOnly={googleLinked}
+            hint={googleLinked ? 'Taken from your Google account.' : undefined}
+            className={googleLinked ? 'border-ring/40 bg-accent text-accent-foreground' : undefined}
           />
+          <DarkField
+            label="Phone number"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="08012345678"
+            value={form.phone ?? ''}
+            onChange={(e) => setField('phone', e.target.value)}
+            error={errors.phone}
+          />
+          {formError && <Alert tone="error-dark">{formError}</Alert>}
+
           <Button
             type="submit"
             size="lg"
             fullWidth
-            disabled={googleBusy || busy || !(form.email ?? '').trim()}
-            className="rounded-full bg-gradient-to-r from-brand-500 to-brand-600 text-base font-semibold shadow-sm hover:from-brand-400 hover:to-brand-500 disabled:from-brand-600/40 disabled:to-brand-600/40 disabled:text-white/60"
+            loading={busy}
+            className="mt-2 h-14 rounded-lg bg-gradient-to-r from-primary to-primary text-base font-semibold shadow-sm transition-all duration-200 hover:from-primary/90 hover:to-primary/90 hover:shadow-md"
           >
-            Next
+            {busy ? 'Creating account…' : 'Create Student Account'}
           </Button>
         </form>
       </div>
 
-      <p className="mt-8 text-center text-sm text-ink-400">
+      <p className="mt-8 text-center text-sm text-muted-foreground">
         Already have an account?{' '}
-        <Link to="/login" className="font-semibold text-brand-400 hover:underline">
+        <Link to="/login" className="font-semibold text-primary underline-offset-4 transition-colors hover:underline">
           Log in
         </Link>
       </p>
-      <p className="mt-2 text-center text-sm text-ink-400">
-        <Link to="/register" className="font-semibold text-brand-400 hover:underline">
+      <p className="mt-2 text-center text-sm text-muted-foreground">
+        <Link to="/register" className="font-semibold text-primary underline-offset-4 transition-colors hover:underline">
           ← Choose a different role
         </Link>
       </p>
     </div>
   )
 
-  // ------- Step 2 · student profile -------
-  const ProfileStep = (
-    <div key="profile" className="animate-keke-step flex flex-col">
-      <div className="mb-4 inline-flex w-fit items-center rounded-full border border-brand-400/40 bg-brand-400/10 px-3 py-1 text-xs font-semibold text-brand-400">
-        Join as Student · 2 of 2
-      </div>
-      <h1 className="text-[26px] font-bold tracking-tight text-white">Student Details</h1>
-      <p className="mt-1.5 text-sm text-ink-400">Tell us about you to verify your student status.</p>
-
-      <div className="mt-6 flex flex-col items-center">
-        <div className="relative">
-          <div className="flex size-16 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white ring-1 ring-white/10">
-            {nameInitials}
-          </div>
-          <span className="absolute -right-0.5 bottom-0 flex size-6 items-center justify-center rounded-full bg-brand-500 text-white ring-4 ring-white/10">
-            <Camera className="size-3" />
-          </span>
-        </div>
-      </div>
-
-      <form onSubmit={handleCreate} className="mt-6 space-y-4" noValidate>
-        <NameAndPasswordFields
-          firstName={form.firstName}
-          lastName={form.lastName}
-          password={form.password}
-          confirmation={form.confirmPassword}
-          locked={googleLinked}
-          errors={errors}
-          onFirstName={(v) => setField('firstName', v)}
-          onLastName={(v) => setField('lastName', v)}
-          onPassword={(v) => setField('password', v)}
-          onConfirmation={(v) => setField('confirmPassword', v)}
-          onUnlockNames={unlockNames}
-        />
-        <DarkField
-          label="Campus email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          placeholder="youremail@gmail.com"
-          value={form.email ?? ''}
-          onChange={(e) => setField('email', e.target.value)}
-          error={errors.email}
-          readOnly={googleLinked}
-          hint={googleLinked ? 'Taken from your Google account.' : undefined}
-          className={googleLinked ? 'border-brand-400/40 bg-brand-400/[0.06] text-brand-200' : undefined}
-        />
-        <DarkField
-          label="Phone number"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          placeholder="08012345678"
-          value={form.phone ?? ''}
-          onChange={(e) => setField('phone', e.target.value)}
-          error={errors.phone}
-        />
-        <DarkSelect
-          label="Faculty"
-          options={FACULTIES}
-          placeholder="Select faculty"
-          value={form.faculty ?? ''}
-          onChange={(e) => setField('faculty', e.target.value)}
-          error={errors.faculty}
-        />
-        <DarkField
-          label="Department"
-          placeholder="e.g. Computer Engineering"
-          value={form.department ?? ''}
-          onChange={(e) => setField('department', e.target.value)}
-          error={errors.department}
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <DarkSelect
-            label="Level"
-            options={LEVELS}
-            placeholder="e.g. 400L"
-            value={form.level ?? ''}
-            onChange={(e) => setField('level', e.target.value)}
-            error={errors.level}
-          />
-          <DarkField
-            label="Matric number"
-            placeholder="230241232"
-            value={form.matricNumber ?? ''}
-            onChange={(e) => setField('matricNumber', e.target.value)}
-            error={errors.matricNumber}
-          />
-        </div>
-
-        {formError && <Alert tone="error-dark">{formError}</Alert>}
-
-        <Button
-          type="submit"
-          size="lg"
-          fullWidth
-          loading={busy}
-          className="mt-2 h-14 rounded-full bg-gradient-to-r from-brand-500 to-brand-600 text-base font-semibold shadow-sm hover:from-brand-400 hover:to-brand-500"
-        >
-          {busy ? 'Creating account…' : 'Create Student Account'}
-        </Button>
-        <button
-          type="button"
-          onClick={() => {
-            if (!busy) setStep('email')
-          }}
-          className="mx-auto block text-sm text-ink-400 transition hover:text-white"
-        >
-          ← Back
-        </button>
-      </form>
-    </div>
-  )
-
-  // ------- Step 3 · verifying -------
+  // ------- Verifying -------
   const VerifyingStep = (
     <div key="verifying" className="animate-ryde-step flex flex-col items-center pt-14 text-center">
       <VerifyingTimer navigate={navigate} />
       <div className="relative mb-10 h-20 w-40">
-        <div className="absolute inset-0 rounded-full bg-brand-500/25 blur-2xl animate-pulse" />
+        <div className="absolute inset-0 rounded-full bg-primary/25 blur-2xl animate-pulse" />
         <div className="relative flex items-center justify-center pt-2">
-          <span className="flex size-16 items-center justify-center rounded-full bg-brand-500 shadow-[0_0_40px_rgba(30,58,138,0.55)]">
-            <span className="text-[28px] font-bold leading-none text-white">R</span>
+          <span className="flex size-16 items-center justify-center rounded-full bg-primary shadow-primary/25">
+            <span className="text-[28px] font-bold leading-none text-foreground">R</span>
           </span>
-          <span className="-ml-1 text-[32px] font-light leading-none text-white">y</span>
+          <span className="-ml-1 text-[32px] font-light leading-none text-foreground">y</span>
         </div>
       </div>
-      <h2 className="text-2xl font-bold tracking-tight text-white">Verifying Student Status…</h2>
-      <p className="mt-2 max-w-[260px] text-sm text-ink-400">This might take a moment.</p>
-      <span className="mt-8 size-9 animate-spin rounded-full border-[3px] border-white/20 border-t-brand-500" />
+      <h2 className="text-2xl font-bold tracking-tight text-foreground">Verifying Student Status…</h2>
+      <p className="mt-2 max-w-[260px] text-sm text-muted-foreground">This might take a moment.</p>
+      <span className="mt-8 size-9 animate-spin rounded-full border-[3px] border-border border-t-primary" />
     </div>
   )
 
   return (
-    <AuthLayout>
-      {step === 'email' && EmailStep}
-      {step === 'profile' && ProfileStep}
-      {step === 'verifying' && VerifyingStep}
-    </AuthLayout>
+    <AuthSplitLayout>
+      {step === 'verifying' ? VerifyingStep : Form}
+    </AuthSplitLayout>
   )
 }
 
