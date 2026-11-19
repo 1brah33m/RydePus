@@ -12,6 +12,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export function Input({ label, error, hint, leadingIcon, className, id, tone = 'light', ...rest }: InputProps) {
+  void tone
   const autoId = useId()
   const inputId = id ?? autoId
   const describedBy = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined
@@ -21,10 +22,7 @@ export function Input({ label, error, hint, leadingIcon, className, id, tone = '
       {label && (
         <label
           htmlFor={inputId}
-          className={cn(
-            'mb-1.5 block text-sm font-medium',
-            tone === 'dark' ? 'text-ink-300' : 'text-ink-700 dark:text-slate-300',
-          )}
+          className={cn('mb-1.5 block text-sm font-medium text-muted-foreground')}
         >
           {label}
         </label>
@@ -33,8 +31,7 @@ export function Input({ label, error, hint, leadingIcon, className, id, tone = '
         {leadingIcon && (
           <span
             className={cn(
-              'pointer-events-none absolute inset-y-0 left-3.5 flex items-center',
-              tone === 'dark' ? 'text-ink-500' : 'text-ink-400',
+              'pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-muted-foreground',
             )}
           >
             {leadingIcon}
@@ -45,27 +42,21 @@ export function Input({ label, error, hint, leadingIcon, className, id, tone = '
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           className={cn(
-            'h-12 w-full rounded-xl border px-4 text-base transition-shadow',
-            'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 focus:outline-none',
+            'h-12 w-full rounded-lg border border-border bg-input px-4 text-base text-foreground transition placeholder:text-muted-foreground',
+            'focus:border-ring focus:ring-2 focus:ring-ring/30 focus:outline-none',
             leadingIcon ? 'pl-10' : undefined,
-            error
-              ? tone === 'dark'
-                ? 'border-rose-400/60 focus:border-rose-400 focus:ring-rose-400/25'
-                : 'border-rose-300 focus:border-rose-400 focus:ring-rose-400/25 dark:border-rose-400/60 dark:focus:border-rose-400 dark:focus:ring-rose-400/25'
-              : tone === 'dark'
-                ? 'border-white/10 bg-white/[0.07] placeholder:text-ink-500 text-white'
-                : 'border-ink-300 bg-white text-ink-900 placeholder:text-ink-400 dark:border-slate-700 dark:bg-[#1E1E1E] dark:text-slate-100 dark:placeholder:text-slate-500',
+            error ? 'border-destructive/60' : 'hover:border-ring/50',
             className,
           )}
           {...rest}
         />
       </div>
       {error ? (
-        <p id={`${inputId}-error`} role="alert" className={cn('mt-1.5 text-sm', tone === 'dark' ? 'text-rose-400' : 'text-rose-600')}>
+        <p id={`${inputId}-error`} role="alert" className={cn('mt-1.5 animate-ryde-shake text-sm text-destructive')}>
           {error}
         </p>
       ) : hint ? (
-        <p id={`${inputId}-hint`} className={cn('mt-1.5 text-sm', tone === 'dark' ? 'text-ink-500' : 'text-ink-500')}>
+        <p id={`${inputId}-hint`} className={cn('mt-1.5 text-sm text-muted-foreground')}>
           {hint}
         </p>
       ) : null}

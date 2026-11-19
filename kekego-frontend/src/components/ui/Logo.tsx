@@ -20,12 +20,13 @@ export function RMark({
   className?: string
   tone?: 'dark' | 'light'
 }) {
+  void tone
   return (
     <span
       aria-hidden
       className={cn(
         'relative inline-flex select-none font-extrabold leading-none tracking-tighter',
-        tone === 'dark' ? 'text-white' : 'text-brand-700',
+        'text-foreground',
         className,
       )}
     >
@@ -33,7 +34,7 @@ export function RMark({
       <span
         className={cn(
           'absolute -top-[0.02em] right-[0.06em] text-[0.42em] font-extrabold leading-none',
-          tone === 'dark' ? 'text-brand-300' : 'text-brand-500',
+          'text-primary',
         )}
       >
         p
@@ -44,31 +45,32 @@ export function RMark({
 
 /** Rydepus stacked wordmark + icon. Branding is centralized here so it is easy to change. */
 export function Logo({ className, iconOnly = false, stacked = false, tone = 'light' }: LogoProps) {
+  void tone
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 dark:bg-brand-500/25">
-        <RMark tone={tone} className="text-lg" />
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15">
+        <RMark className="text-lg" />
       </span>
       {!iconOnly &&
         (stacked ? (
           <span
             className={cn(
               'flex flex-col text-xl font-bold leading-[1.05] tracking-tight',
-              tone === 'dark' ? 'text-white' : 'text-ink-900',
+              'text-foreground',
             )}
           >
             <span>Ryde</span>
-            <span className={tone === 'dark' ? 'text-brand-400' : 'text-brand-500'}>pus</span>
+            <span className="text-primary">pus</span>
           </span>
         ) : (
           <span
             className={cn(
               'text-xl font-bold tracking-tight',
-              tone === 'dark' ? 'text-white' : 'text-ink-900',
+              'text-foreground',
             )}
           >
             Ryde
-            <span className={tone === 'dark' ? 'text-brand-400' : 'text-brand-500'}>pus</span>
+            <span className="text-primary">pus</span>
           </span>
         ))}
     </div>
