@@ -1,4 +1,4 @@
-import { Moon, Sun } from 'lucide-react'
+import { Moon01Icon, Sun01Icon } from 'hugeicons-react'
 import { useTheme } from '../../context/ThemeContext'
 import { cn } from '../../utils/cn'
 
@@ -23,21 +23,21 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       onClick={toggleTheme}
       className={cn(
         'relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors',
-        isDark ? 'bg-brand-500' : 'bg-ink-200',
+        isDark ? 'bg-primary' : 'bg-muted border border-border',
         className,
       )}
     >
       <span
         aria-hidden
         className={cn(
-          'flex size-6 items-center justify-center rounded-full bg-white shadow-sm transition-transform',
+          'flex size-6 items-center justify-center rounded-full bg-card shadow-sm transition-transform',
           isDark ? 'translate-x-7' : 'translate-x-1',
         )}
       >
         {isDark ? (
-          <Moon className="size-3.5 text-ink-900" />
+          <Moon01Icon className="size-3.5 text-foreground" />
         ) : (
-          <Sun className="size-3.5 text-amber-500" />
+          <Sun01Icon className="size-3.5 text-amber-500" />
         )}
       </span>
     </button>

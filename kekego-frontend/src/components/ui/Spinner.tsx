@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react'
+import { Loading02Icon } from 'hugeicons-react'
 import { cn } from '../../utils/cn'
 
 type Size = 'sm' | 'md' | 'lg'
@@ -20,7 +20,7 @@ export function Spinner({
 }) {
   return (
     <span role="status" aria-label={label}>
-      <Loader2 aria-hidden className={cn('animate-spin', sizes[size], className)} />
+      <Loading02Icon aria-hidden className={cn('animate-spin', sizes[size], className)} />
     </span>
   )
 }
