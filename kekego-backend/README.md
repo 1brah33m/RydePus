@@ -297,7 +297,7 @@ Student creates/joins a group     1/4  2/4  3/4  4/4
         group reaches capacity  OR  a student pays for ALL remaining seats
                     |
                     v
-              Group is FULL  ───>  Student publishes a Trip
+              Group is FULL  ───>  server auto-dispatches a PENDING Trip
                     |
                     v
           Driver discovery (same pickup + destination, strict filters)
