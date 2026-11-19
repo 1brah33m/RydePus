@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CircleAlert, Radar, Users } from 'lucide-react'
+import { AlertCircleIcon, Radar01Icon, UserGroupIcon } from 'hugeicons-react'
 import { formatCurrency } from '../../utils/format'
 import { cn } from '../../utils/cn'
 import type { Trip } from '../../types'
@@ -59,7 +59,7 @@ export function DriverRequests() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="flex items-center gap-1.5 text-sm font-bold text-amber-900 dark:text-amber-200">
-                  <CircleAlert aria-hidden className="size-4" />
+                  <AlertCircleIcon aria-hidden className="size-4" />
                   {awaitingStart
                     ? 'Finish this ride before accepting another'
                     : 'The ride is in progress'}
@@ -145,7 +145,7 @@ function RequestCard({
       </div>
 
       <p className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-ink-500 dark:text-slate-400">
-        <Users aria-hidden className="size-4" />
+        <UserGroupIcon aria-hidden className="size-4" />
         {passengers} passenger{passengers > 1 ? 's' : ''} pooled
       </p>
 
@@ -189,7 +189,7 @@ function EmptyState({
         <span aria-hidden className="absolute inset-0 animate-ping rounded-full bg-brand-500/20 dark:bg-brand-500/25" />
         <span aria-hidden className="absolute inset-3 animate-ping rounded-full bg-brand-500/15 [animation-delay:150ms]" />
         <span className="relative flex size-12 items-center justify-center rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400">
-          <Radar aria-hidden className="size-6" />
+          <Radar01Icon aria-hidden className="size-6" />
         </span>
       </div>
 

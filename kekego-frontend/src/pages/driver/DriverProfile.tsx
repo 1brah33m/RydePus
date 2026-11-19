@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BadgeCheck, Car, HelpCircle, LogOut, Mail, Moon, Phone, Star } from 'lucide-react'
+import { CheckmarkBadge01Icon, Car01Icon, HelpCircleIcon, Logout01Icon, Mail01Icon, Moon01Icon, Call02Icon, StarIcon } from 'hugeicons-react'
 import { useAuth } from '../../context/AuthContext'
 import { useDriverRide } from '../../hooks/useDriverRide'
 import { DriverShell } from '../../components/navigation/DriverShell'
@@ -40,16 +40,16 @@ export function DriverProfile() {
   const ratingLabel = profile?.rating != null ? profile.rating.toFixed(1) : 'New'
 
   const rows = [
-    { icon: Car, label: 'Vehicle', value: vehicleLabel },
-    { icon: BadgeCheck, label: 'Plate Number', value: profile?.vehicle_plate },
-    { icon: BadgeCheck, label: 'License Number', value: profile?.license_number },
-    { icon: Mail, label: 'Email', value: profile?.email },
-    { icon: Phone, label: 'Phone', value: profile?.phone_number },
+    { icon: Car01Icon, label: 'Vehicle', value: vehicleLabel },
+    { icon: CheckmarkBadge01Icon, label: 'Plate Number', value: profile?.vehicle_plate },
+    { icon: CheckmarkBadge01Icon, label: 'License Number', value: profile?.license_number },
+    { icon: Mail01Icon, label: 'Email', value: profile?.email },
+    { icon: Call02Icon, label: 'Phone', value: profile?.phone_number },
   ]
 
   const actions = [
-    { icon: BadgeCheck, label: 'Permit & Verification', onClick: () => setNotice('Vehicle permit verified. Epe campus zone approved.') },
-    { icon: HelpCircle, label: 'Help & Support', onClick: () => setNotice('Our help centre is coming soon.') },
+    { icon: CheckmarkBadge01Icon, label: 'Permit & Verification', onClick: () => setNotice('Vehicle permit verified. Epe campus zone approved.') },
+    { icon: HelpCircleIcon, label: 'Help & Support', onClick: () => setNotice('Our help centre is coming soon.') },
   ]
 
   return (
@@ -82,14 +82,14 @@ export function DriverProfile() {
           </div>
           <div className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
-              <Car aria-hidden className="size-3.5 text-brand-600 dark:text-brand-400" />
+              <Car01Icon aria-hidden className="size-3.5 text-brand-600 dark:text-brand-400" />
               Total trips
             </span>
             <p className="mt-1.5 text-2xl font-bold">{history.length}</p>
           </div>
           <div className="col-span-2 rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E] lg:col-span-1">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
-              <Star aria-hidden className="size-3.5 fill-keke-500 text-keke-500" />
+              <StarIcon aria-hidden className="size-3.5 fill-keke-500 text-keke-500" />
               Rating
             </span>
             <p className="mt-1.5 text-2xl font-bold">
@@ -157,7 +157,7 @@ export function DriverProfile() {
               {action.label === 'Help & Support' && (
                 <div className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-sm font-medium text-ink-800 dark:text-slate-200">
                   <span className="flex items-center gap-3">
-                    <Moon aria-hidden className="size-4.5 shrink-0 text-brand-600 dark:text-brand-400" />
+                    <Moon01Icon aria-hidden className="size-4.5 shrink-0 text-brand-600 dark:text-brand-400" />
                     Dark Mode
                   </span>
                   <ThemeToggle />
@@ -170,7 +170,7 @@ export function DriverProfile() {
             onClick={() => setConfirmLogout(true)}
             className="flex w-full items-center gap-3 px-5 py-3.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
           >
-            <LogOut aria-hidden className="size-4.5 shrink-0" />
+            <Logout01Icon aria-hidden className="size-4.5 shrink-0" />
             Logout
           </button>
         </section>

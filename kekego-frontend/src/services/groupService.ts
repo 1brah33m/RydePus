@@ -151,9 +151,19 @@ export class GroupService {
     return mapGroup(api, currentMemberId)
   }
 
-  /** Join an existing group. The backend rejects full/closed groups. */
-  async joinGroup(groupId: string, currentMemberId?: string): Promise<Group> {
-    const api = await apiClient.post<ApiGroup>(`/groups/${groupId}/join/`, undefined, { auth: true })
+  /**
+   * Join an existing group, claiming `seats` slots (defaults to just your own).
+   *
+   * The chosen count travels with the request so the backend can reserve the
+   * exact number of seats — the joiner's own plus any passengers they bring —
+   * and reject a count that would overflow the keke.
+   */
+  async joinGroup(groupId: string, currentMemberId?: string, seats = 1): Promise<Group> {
+    const api = await apiClient.post<ApiGroup>(
+      `/groups/${groupId}/join/`,
+      { seats: Math.max(1, Math.trunc(seats)), currency: CURRENCY },
+      { auth: true },
+    )
     return mapGroup(api, currentMemberId)
   }
 
