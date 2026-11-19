@@ -1,30 +1,30 @@
 import type { ReactNode } from 'react'
-import { CheckCircle2, AlertCircle, Info } from 'lucide-react'
+import { CheckmarkCircle02Icon, AlertCircleIcon, InformationCircleIcon } from 'hugeicons-react'
 import { cn } from '../../utils/cn'
 
 type Tone = 'success' | 'error' | 'info' | 'error-dark'
 
 const styles: Record<Tone, { box: string; icon: string }> = {
   success: {
-    box: 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-400/30 dark:bg-brand-500/10 dark:text-brand-300',
-    icon: 'text-brand-600 dark:text-brand-400',
+    box: 'border-border bg-card text-card-foreground',
+    icon: 'text-primary',
   },
   error: {
-    box: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300',
-    icon: 'text-rose-600 dark:text-rose-400',
+    box: 'border-destructive/30 bg-destructive/10 text-destructive',
+    icon: 'text-destructive',
   },
   info: {
-    box: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-sky-300',
-    icon: 'text-sky-600 dark:text-sky-400',
+    box: 'border-border bg-muted text-muted-foreground',
+    icon: 'text-muted-foreground',
   },
-  'error-dark': { box: 'border-rose-400/30 bg-rose-500/10 text-rose-300', icon: 'text-rose-400' },
+  'error-dark': { box: 'border-destructive/30 bg-destructive/10 text-destructive', icon: 'text-destructive' },
 }
 
-const icons: Record<Tone, typeof CheckCircle2> = {
-  success: CheckCircle2,
-  error: AlertCircle,
-  'error-dark': AlertCircle,
-  info: Info,
+const icons: Record<Tone, typeof CheckmarkCircle02Icon> = {
+  success: CheckmarkCircle02Icon,
+  error: AlertCircleIcon,
+  'error-dark': AlertCircleIcon,
+  info: InformationCircleIcon,
 }
 
 export function Alert({ tone = 'info', className, children }: { tone?: Tone; className?: string; children: ReactNode }) {
