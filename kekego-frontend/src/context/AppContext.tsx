@@ -137,7 +137,7 @@ interface AppContextValue {
     /** How many seats to pay for, including the creator's own. Defaults to 1. */
     seats?: number,
   ) => Promise<Group>
-  joinGroup: (groupId: string, seats?: number) => Promise<Group>
+  joinGroup: (groupId: string) => Promise<Group>
   cancelGroup: (groupId: string) => Promise<void>
   leaveGroup: (groupId: string) => Promise<void>
   /**
@@ -289,7 +289,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const joinGroup = useCallback(
-    async (groupId: string, seats = 1): Promise<Group> => {
+    async (groupId: string): Promise<Group> => {
       requireStudent()
       if (state.activeGroupId && state.activeGroupId !== groupId) {
         const active = state.groups.find((g) => g.id === state.activeGroupId)
@@ -297,7 +297,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           `You are already part of an active group (${active?.code ?? 'open'}). You must leave your current group before joining a new one.`,
         )
       }
-      const group = await groupService.joinGroup(groupId, currentMemberId, seats)
+      const group = await groupService.joinGroup(groupId, currentMemberId)
       // The group may have just filled up with this join, in which case the
       // ride request goes out right away.
       if (group.isDispatchable) {

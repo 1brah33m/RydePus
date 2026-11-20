@@ -126,7 +126,7 @@ export function FindRide() {
                   key={group.id}
                   group={group}
                   joining={joiningId === group.id}
-                  onJoin={() => join(group.id, seats)}
+                  onJoin={() => join(group.id)}
                 />
               ))}
             </div>

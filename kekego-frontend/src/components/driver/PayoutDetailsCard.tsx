@@ -14,11 +14,11 @@ interface PayoutDetailsCardProps {
 
 function SavedField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <dt className="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">
+    <div className="flex min-w-0 flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
-      <dd className="break-words text-sm font-semibold text-ink-900 dark:text-slate-100">{value}</dd>
+      <dd className="min-w-0 break-words text-sm font-semibold text-foreground sm:text-right">{value}</dd>
     </div>
   )
 }
@@ -65,12 +65,12 @@ export function PayoutDetailsCard({ initial, hasPayoutDetails, onSave }: PayoutD
   return (
     <Card className="p-5">
       <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
           <Building02Icon aria-hidden className="size-5" />
         </span>
-        <div>
-          <h2 className="text-base font-bold text-ink-900 dark:text-slate-100">Payout account</h2>
-          <p className="mt-0.5 text-sm text-ink-500 dark:text-slate-400">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-foreground">Payout account</h2>
+          <p className="mt-0.5 text-sm break-words text-muted-foreground">
             {hasPayoutDetails
               ? 'Students transfer fares directly to this account.'
               : 'The bank account students transfer fares to.'}
@@ -86,7 +86,7 @@ export function PayoutDetailsCard({ initial, hasPayoutDetails, onSave }: PayoutD
 
       {hasPayoutDetails && !editing ? (
         <>
-          <dl className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-2xl border border-ink-100 dark:divide-white/5 dark:border-slate-800">
+          <dl className="mt-4 divide-y divide-border overflow-hidden rounded-2xl border border-border">
             <SavedField label="Bank name" value={savedBankName} />
             <SavedField label="Account number" value={savedAccountNumber} />
             <SavedField label="Account name" value={savedAccountName} />
