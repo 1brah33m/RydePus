@@ -13,15 +13,13 @@ import {
   CheckmarkCircle02Icon,
   CircleIcon,
   AlertCircleIcon,
-  Copy01Icon,
-  Tick01Icon,
-  Share08Icon,
 } from 'hugeicons-react'
 import { useApp } from '../../context/AppContext'
 import { isGroupCancellationLocked } from '../../utils/rideStatus'
 import { formatCurrency } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
+import { MembershipBlockModal } from '../../components/groups/MembershipBlockModal'
 import { cn } from '../../utils/cn'
 
 export function GroupStatus() {
@@ -35,6 +33,10 @@ export function GroupStatus() {
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [joining, setJoining] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
+  const [blockedOpen, setBlockedOpen] = useState(false)
+  const [blockLeaving, setBlockLeaving] = useState(false)
+  const [blockWarning, setBlockWarning] = useState<string | null>(null)
   const [leaveBlocked, setLeaveBlocked] = useState(false)
   const [dismissedNoticeFor, setDismissedNoticeFor] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
@@ -42,7 +44,6 @@ export function GroupStatus() {
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState<string | null>(null)
   const [buyOutSeats, setBuyOutSeats] = useState(0)
-  const [copied, setCopied] = useState(false)
 
   // Brief toast for the "pool is full" notice: shows on arrival, hides itself.
   const noticeId = group?.id
@@ -87,7 +88,8 @@ export function GroupStatus() {
     )
   }
 
-  const isActive = activeGroup?.id === group.id
+  const isMember = group?.members.some((m) => m.isCurrentUser) ?? false
+  const isActive = activeGroup?.id === group?.id || isMember
   const occupied = group.seatsFilled
   const waiting = group.remainingSeats
   const full = occupied >= group.maxSize || waiting <= 0
@@ -142,16 +144,50 @@ export function GroupStatus() {
     }
   }
 
-  /** Join a shared group, then open it. */
+  /** Join a shared group, then open it. Surfaces errors instead of swallowing them. */
   const handleJoin = async () => {
+    // Already in a different group: offer to view it or leave it first,
+    // instead of firing a request that the server must reject.
+    if (activeGroup && activeGroup.id !== group.id) {
+      setBlockedOpen(true)
+      return
+    }
     setJoining(true)
+    setJoinError(null)
     try {
       const joined = await joinGroup(group.id)
       navigate(`/groups/${joined.id}`, { replace: true })
-    } catch {
-      navigate(`/groups/${group.id}`, { replace: true })
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : 'Could not join this group. Please try again.')
     } finally {
       setJoining(false)
+    }
+  }
+
+  /** Leave the current group, then join this shared one. */
+  const handleLeaveAndJoin = async () => {
+    if (!activeGroup) {
+      setBlockedOpen(false)
+      return
+    }
+    setBlockLeaving(true)
+    setBlockWarning(null)
+    setJoinError(null)
+    try {
+      await leaveGroup(activeGroup.id)
+      setBlockedOpen(false)
+      setJoining(true)
+      try {
+        const joined = await joinGroup(group.id)
+        navigate(`/groups/${joined.id}`, { replace: true })
+      } catch (err) {
+        setJoinError(err instanceof Error ? err.message : 'Could not join this group. Please try again.')
+      } finally {
+        setJoining(false)
+      }
+    } catch {
+      setBlockLeaving(false)
+      setBlockWarning('A driver is already assigned to this trip. You cannot leave the group now.')
     }
   }
 
@@ -311,6 +347,20 @@ export function GroupStatus() {
                 </p>
               </div>
             </div>
+            {joinError && (
+              <Alert tone="error">
+                <div className="flex items-start justify-between gap-3">
+                  <span>{joinError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setJoinError(null)}
+                    className="shrink-0 font-semibold underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </Alert>
+            )}
             <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto]">
               <Button size="lg" fullWidth loading={joining} onClick={handleJoin}>
                 Join pool — {formatCurrency(perSeat)} a seat
@@ -319,6 +369,21 @@ export function GroupStatus() {
                 Back to Home
               </Button>
             </div>
+            <MembershipBlockModal
+              open={blockedOpen}
+              code={activeGroup?.code ?? ''}
+              leaving={blockLeaving}
+              warning={blockWarning}
+              onClose={() => {
+                setBlockedOpen(false)
+                setBlockWarning(null)
+              }}
+              onViewGroup={() => {
+                setBlockedOpen(false)
+                if (activeGroup) navigate(`/groups/${activeGroup.id}`)
+              }}
+              onLeaveGroup={handleLeaveAndJoin}
+            />
           </>
         )
       ) : searching ? (
@@ -421,56 +486,6 @@ export function GroupStatus() {
               </span>
             </Button>
           )}
-
-          <div className="mt-3 rounded-2xl border border-dashed border-border bg-muted/40 p-3.5">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-card text-muted-foreground">
-                <Share08Icon aria-hidden className="size-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                  Group code · {occupied}/{group.maxSize} joined
-                </p>
-                <p className="truncate font-mono text-xl font-bold tracking-[0.2em] text-foreground">
-                  {group.code}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  Share this code to fill seats faster
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const done = () => {
-                    setCopied(true)
-                    window.setTimeout(() => setCopied(false), 2000)
-                  }
-                  if (navigator.clipboard?.writeText) {
-                    void navigator.clipboard.writeText(group.code).then(done).catch(done)
-                  } else {
-                    const field = document.createElement('textarea')
-                    field.value = group.code
-                    document.body.appendChild(field)
-                    field.select()
-                    try {
-                      document.execCommand('copy')
-                    } finally {
-                      document.body.removeChild(field)
-                    }
-                    done()
-                  }
-                }}
-                className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              >
-                {copied ? (
-                  <Tick01Icon aria-hidden className="size-4 shrink-0" />
-                ) : (
-                  <Copy01Icon aria-hidden className="size-4 shrink-0" />
-                )}
-                <span className="whitespace-nowrap">{copied ? 'Copied' : 'Copy'}</span>
-              </button>
-            </div>
-          </div>
 
           <div className="mt-3 flex min-w-0 flex-col gap-2.5">
             <div className="grid min-w-0 grid-cols-2 gap-2.5">

@@ -4,6 +4,7 @@ import { Clock01Icon, Add01Icon, UserGroupIcon, User02Icon } from 'hugeicons-rea
 import { useApp } from '../../context/AppContext'
 import { useGroupJoin } from '../../hooks/useGroupJoin'
 import { Button } from '../../components/ui/Button'
+import { Alert } from '../../components/ui/Alert'
 import { MembershipBlockModal } from '../../components/groups/MembershipBlockModal'
 import { cn } from '../../utils/cn'
 import { formatCurrency } from '../../utils/format'
@@ -29,7 +30,7 @@ function isOpenGroup(status: string, occupied: number, maxSize: number): boolean
 
 export function GroupsPage() {
   const { activeGroup, allPendingGroups } = useApp()
-  const { joiningId, blockedGroupId, leaving, leaveBlocked, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock } =
+  const { joiningId, blockedGroupId, leaving, leaveBlocked, joinError, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissJoinError } =
     useGroupJoin()
 
   const [filter, setFilter] = useState<Filter>('all')
@@ -133,6 +134,16 @@ export function GroupsPage() {
       )}
 
       <section aria-label="Groups" className="min-w-0">
+        {joinError && (
+          <Alert tone="error" className="mb-4">
+            <div className="flex items-start justify-between gap-3">
+              <span>{joinError}</span>
+              <button type="button" onClick={dismissJoinError} className="shrink-0 font-semibold underline">
+                Dismiss
+              </button>
+            </div>
+          </Alert>
+        )}
         {visibleGroups.length > 0 ? (
           <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
             {visibleGroups.map((group) => (
@@ -195,22 +206,22 @@ function GroupCard({
   const leavingSoon = mins < 1
 
   return (
-    <div className="flex min-w-0 flex-col rounded-3xl border border-border bg-card p-5 transition-colors hover:border-ring">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 gap-3">
-          <div aria-hidden className="flex flex-col items-center pt-1.5">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-border bg-card p-5 transition-colors hover:border-ring">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 gap-3">
+          <div aria-hidden className="flex shrink-0 flex-col items-center pt-1.5">
             <span className="size-2 rounded-full border-2 border-primary" />
             <span className="my-1 w-px flex-1 bg-border" />
             <span className="size-2 rounded-[3px] bg-foreground" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <p className="truncate text-[15px] font-bold text-foreground">{group.pickup.name}</p>
             <p className="mt-1.5 truncate text-[15px] font-bold text-foreground">{group.destination.name}</p>
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-xl font-bold tracking-tight text-foreground">{formatCurrency(group.fareTotal)}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">per keke</p>
+          <p className="text-xl font-bold tracking-tight whitespace-nowrap text-foreground">{formatCurrency(group.fareTotal)}</p>
+          <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">per keke</p>
         </div>
       </div>
 

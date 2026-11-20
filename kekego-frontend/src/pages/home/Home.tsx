@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight01Icon, ArrowUpDownIcon, UserGroupIcon } from 'hugeicons-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
+import { useGroupJoin } from '../../hooks/useGroupJoin'
 import { initials } from '../../utils/nameInitials'
 import { CAMPUS_LOCATIONS } from '../../config/locations'
 import { perSeatFare } from '../../config/pricing'
@@ -11,6 +12,8 @@ import type { Group } from '../../types'
 import { LANDING_KEY } from '../../utils/keys'
 import { formatCurrency } from '../../utils/format'
 import { LocationDropdown } from '../../components/ui/LocationDropdown'
+import { Alert } from '../../components/ui/Alert'
+import { MembershipBlockModal } from '../../components/groups/MembershipBlockModal'
 import type { SelectOption } from '../../components/ui/Select'
 import { cn } from '../../utils/cn'
 
@@ -30,7 +33,20 @@ function greetingFor(hour: number): string {
 
 export function Home() {
   const { student } = useAuth()
-  const { pendingGroups, joinGroup } = useApp()
+  const { pendingGroups, activeGroup } = useApp()
+  const {
+    joiningId,
+    blockedGroupId,
+    leaving,
+    leaveBlocked,
+    joinError,
+    join,
+    dismissBlock,
+    viewActiveGroup,
+    leaveAndJoin,
+    dismissLeaveBlock,
+    dismissJoinError,
+  } = useGroupJoin()
   const navigate = useNavigate()
 
   const [pickupId, setPickupId] = useState('')
@@ -85,12 +101,10 @@ export function Home() {
   }
 
   const handlePoolOpen = async (group: Group) => {
-    try {
-      const joined = await joinGroup(group.id)
-      navigate(`/groups/${joined.id}`)
-    } catch {
-      navigate(`/groups/${group.id}`)
-    }
+    // Route through the shared join guard so "already in a group" opens the
+    // membership modal and failures surface as an error instead of silently
+    // landing on the detail page.
+    await join(group.id)
   }
 
   const hour = new Date().getHours()
@@ -286,9 +300,14 @@ export function Home() {
         </div>
 
         {pendingGroups.length > 0 ? (
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="mt-4 grid min-w-0 gap-4 md:grid-cols-2">
             {pendingGroups.map((group) => (
-              <PoolOfferCard key={group.id} group={group} onOpen={() => handlePoolOpen(group)} />
+              <PoolOfferCard
+                key={group.id}
+                group={group}
+                joining={joiningId === group.id}
+                onOpen={() => handlePoolOpen(group)}
+              />
             ))}
           </div>
         ) : (
@@ -304,33 +323,55 @@ export function Home() {
             </div>
           </div>
         )}
+        {joinError && (
+          <Alert tone="error" className="mt-4">
+            <div className="flex items-start justify-between gap-3">
+              <span>{joinError}</span>
+              <button type="button" onClick={dismissJoinError} className="shrink-0 font-semibold underline">
+                Dismiss
+              </button>
+            </div>
+          </Alert>
+        )}
       </section>
+      <MembershipBlockModal
+        open={blockedGroupId !== null}
+        code={activeGroup?.code ?? ''}
+        leaving={leaving}
+        warning={leaveBlocked ? 'A driver is already assigned to this trip. You cannot leave the group now.' : null}
+        onClose={() => {
+          dismissBlock()
+          dismissLeaveBlock()
+        }}
+        onViewGroup={viewActiveGroup}
+        onLeaveGroup={leaveAndJoin}
+      />
     </div>
   )
 }
 
-function PoolOfferCard({ group, onOpen }: { group: Group; onOpen: () => void }) {
+function PoolOfferCard({ group, joining, onOpen }: { group: Group; joining?: boolean; onOpen: () => void }) {
   const occupied = group.seatsFilled
   // Server-priced fare for the whole keke.
   const poolFare = group.fareTotal
 
   return (
-    <div className="flex flex-col rounded-3xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-ring">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 gap-3">
-          <div aria-hidden className="flex flex-col items-center pt-1.5">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-ring">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 gap-3">
+          <div aria-hidden className="flex shrink-0 flex-col items-center pt-1.5">
             <span className="size-2 rounded-full border-2 border-primary" />
             <span className="my-1 w-px flex-1 bg-border" />
             <span className="size-2 rounded-[3px] bg-foreground" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <p className="truncate text-sm font-bold text-foreground">{group.pickup.name}</p>
             <p className="mt-2 truncate text-sm font-bold text-foreground">{group.destination.name}</p>
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-xl font-bold tracking-tight text-foreground">{formatCurrency(poolFare)}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">per keke</p>
+          <p className="text-xl font-bold tracking-tight whitespace-nowrap text-foreground">{formatCurrency(poolFare)}</p>
+          <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">per keke</p>
         </div>
       </div>
 
@@ -346,9 +387,10 @@ function PoolOfferCard({ group, onOpen }: { group: Group; onOpen: () => void }) 
         <button
           type="button"
           onClick={onOpen}
-          className="shrink-0 rounded-xl border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          disabled={joining}
+          className="shrink-0 rounded-xl border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
         >
-          Join pool
+          {joining ? 'Joining…' : 'Join pool'}
         </button>
       </div>
     </div>
