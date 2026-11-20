@@ -41,10 +41,10 @@ def _cover_seats(group, user, seats: int, currency=None):
     """Cover ``seats`` total seats for ``user`` as one consolidated charge.
 
     ``seats`` counts the user's own seat, so ``seats - 1`` empty seats are
-    recorded. Used both when a creator pays for extra seats up front and when a
-    joiner brings passengers along with them; either way the group's seat count
-    moves by exactly ``seats``. Priced from the group's own coordinates so a
-    client cannot underpay.
+    recorded. Used when a creator pays for extra seats up front; the group's
+    seat count moves by exactly ``seats``. Priced from the group's own
+    coordinates so a client cannot underpay. Joining never calls this —
+    a join is always exactly one seat, with extra seats filled via buyout.
     """
     extra = seats - 1
     if extra <= 0:
@@ -299,16 +299,27 @@ class GroupListView(APIView):
 
 
 class GroupJoinSerializer(serializers.Serializer):
-    """Request body for joining a group with a chosen seat count."""
+    """Request body for joining a group.
 
-    #: Seats the joiner is claiming, including their own (1..remaining).
-    seats = serializers.IntegerField(default=1, min_value=1, write_only=True)
+    ``seats`` is accepted for backward compatibility with older clients but
+    is ignored: joining always reserves exactly one seat (the joiner's own).
+    Extra seats are never auto-assigned — the joiner uses the explicit
+    buyout endpoint if they want to fill empty seats.
+    """
+
+    #: Ignored; kept so older clients sending ``seats`` do not 400.
+    seats = serializers.IntegerField(default=1, min_value=1, required=False, write_only=True)
     #: Accepted for client compatibility; the server prices the seats itself.
     currency = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
 
 class GroupJoinView(APIView):
-    """POST /api/v1/groups/{id}/join/ - join a group as a student."""
+    """POST /api/v1/groups/{id}/join/ - join a group as a student.
+
+    Joining always reserves exactly one seat: the joiner's own membership.
+    It never auto-covers extra seats, even if the client sends ``seats`` —
+    filling empty seats is an explicit, separate buyout decision.
+    """
 
     permission_classes = [IsStudent]
 
@@ -324,27 +335,12 @@ class GroupJoinView(APIView):
             if not group.joinable:
                 return Response({"error": {"code": "INVALID", "message": "This group is already at capacity."}}, status=status.HTTP_400_BAD_REQUEST)
 
-            # The joiner claims exactly the seats they ask for (defaulting to
-            # just their own). Extra seats are a seat commitment recorded like a
-            # buyout, so the group's remaining count drops by the full amount
-            # and can never overflow past capacity.
+            # Validate the body for forward compatibility, but deliberately
+            # ignore any requested seat count: a join is always one seat.
             body = GroupJoinSerializer(data=request.data)
             body.is_valid(raise_exception=True)
-            seats = body.validated_data["seats"]
-            remaining = group.remaining_seats
-            if seats > remaining:
-                return Response(
-                    {
-                        "error": {
-                            "code": "INVALID",
-                            "message": f"Choose between 1 and {remaining} seat(s); this group has {remaining} empty.",
-                        }
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
             GroupMember.objects.create(group=group, user=request.user)
-            _cover_seats(group, request.user, seats, body.validated_data.get("currency"))
             group.refresh_status()
             # Filling the last seat turns the group into a ride request at once,
             # so the driver queue sees it without waiting on the student's client.
