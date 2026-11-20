@@ -7,9 +7,9 @@ import { useApp } from '../context/AppContext'
  *
  * Prevents a student from joining a group while they are already part of
  * another active one. When blocked it exposes the pending group so the UI can
- * offer to view the current group or leave it (and continue joining). The seat
- * count a student chooses travels with the join so a full group join is
- * rejected up front rather than overflowing capacity.
+ * offer to view the current group or leave it (and continue joining).
+ * Joining always reserves exactly one seat; filling empty seats is a separate
+ * explicit buyout step.
  */
 export function useGroupJoin() {
   const navigate = useNavigate()
@@ -17,21 +17,19 @@ export function useGroupJoin() {
 
   const [joiningId, setJoiningId] = useState<string | null>(null)
   const [blockedGroupId, setBlockedGroupId] = useState<string | null>(null)
-  const [blockedSeats, setBlockedSeats] = useState(1)
   const [leaving, setLeaving] = useState(false)
   const [leaveBlocked, setLeaveBlocked] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
 
-  const join = async (groupId: string, seats = 1) => {
+  const join = async (groupId: string) => {
     if (activeGroup && activeGroup.id !== groupId) {
-      setBlockedSeats(seats)
       setBlockedGroupId(groupId)
       return
     }
     setJoiningId(groupId)
     setJoinError(null)
     try {
-      const joined = await joinGroup(groupId, seats)
+      const joined = await joinGroup(groupId)
       navigate(`/groups/${joined.id}`)
     } catch (error) {
       setJoinError(error instanceof Error ? error.message : 'Could not join this group.')
@@ -53,10 +51,9 @@ export function useGroupJoin() {
     setJoinError(null)
     try {
       const targetId = blockedGroupId
-      const seats = blockedSeats
       await leaveGroup(activeGroup.id)
       setBlockedGroupId(null)
-      const joined = await joinGroup(targetId, seats)
+      const joined = await joinGroup(targetId)
       navigate(`/groups/${joined.id}`)
     } catch {
       setLeaving(false)
