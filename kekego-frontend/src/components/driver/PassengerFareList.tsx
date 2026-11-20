@@ -26,33 +26,33 @@ export function PassengerFareList({
     <div
       className={cn(
         'overflow-hidden rounded-2xl',
-        onBrand ? 'bg-white/15' : 'bg-ink-50 dark:bg-white/5',
+        onBrand ? 'bg-white/15' : 'bg-muted',
         className,
       )}
     >
       <p
         className={cn(
           'px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider',
-          onBrand ? 'text-white/80' : 'text-ink-500 dark:text-slate-400',
+          onBrand ? 'text-white/80' : 'text-muted-foreground',
         )}
       >
         Passengers &amp; fare
       </p>
-      <ul className={cn('divide-y', onBrand ? 'divide-white/15' : 'divide-ink-100 dark:divide-white/5')}>
+      <ul className={cn('divide-y', onBrand ? 'divide-white/15' : 'divide-border')}>
         {passengers.map((p) => (
           <li key={p.id} className="flex items-center justify-between gap-3 px-3.5 py-2 text-sm">
             <span
               className={cn(
                 'min-w-0 truncate font-medium',
-                onBrand ? 'text-white' : 'text-ink-800 dark:text-slate-200',
+                onBrand ? 'text-white' : 'text-foreground',
               )}
             >
               {p.name}
             </span>
             <span
               className={cn(
-                'shrink-0 tabular-nums',
-                onBrand ? 'text-white/90' : 'text-ink-600 dark:text-slate-300',
+                'shrink-0 whitespace-nowrap tabular-nums',
+                onBrand ? 'text-white/90' : 'text-muted-foreground',
               )}
             >
               {p.seats} seat{p.seats > 1 ? 's' : ''} · <strong>{formatCurrency(p.seats * trip.fare)}</strong>
@@ -63,7 +63,7 @@ export function PassengerFareList({
       <div
         className={cn(
           'flex items-center justify-between gap-3 border-t px-3.5 py-2 text-sm font-bold',
-          onBrand ? 'border-white/15 text-white' : 'border-ink-100 text-ink-900 dark:border-white/5 dark:text-slate-100',
+          onBrand ? 'border-white/15 text-white' : 'border-border text-foreground',
         )}
       >
         <span>Total fare</span>

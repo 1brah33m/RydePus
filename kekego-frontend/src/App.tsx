@@ -24,6 +24,7 @@ import { DriverHome } from './pages/driver/DriverHome'
 import { DriverRequests } from './pages/driver/DriverRequests'
 import { DriverEarnings } from './pages/driver/DriverEarnings'
 import { DriverProfile } from './pages/driver/DriverProfile'
+import { DriverRideProvider } from './context/DriverRideContext'
 import { homePathForRole } from './utils/routing'
 
 /** Root route: onboarding for guests, a brief branded splash for returning users. */
@@ -77,7 +78,7 @@ function DriverProtected({ children }: { children: ReactNode }) {
   if (role !== 'driver') {
     return <Navigate to={homePathForRole(role)} replace />
   }
-  return <>{children}</>
+  return <DriverRideProvider>{children}</DriverRideProvider>
 }
 
 /**
