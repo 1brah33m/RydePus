@@ -7,7 +7,10 @@ import { DriverShell } from '../../components/navigation/DriverShell'
 import { PayoutDetailsCard } from '../../components/driver/PayoutDetailsCard'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
+import { Card } from '../../components/ui/Card'
+import { Alert } from '../../components/ui/Alert'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
+import { cn } from '../../utils/cn'
 
 function nameInitials(fullName: string): string {
   return fullName
@@ -33,6 +36,7 @@ export function DriverProfile() {
       : profile?.availability_status === 'BUSY'
         ? 'On a ride'
         : 'Offline'
+  const isAway = statusText === 'Offline'
 
   // Fall back through the fields a driver may actually have: a vehicle name or
   // type, otherwise the plate number, otherwise a sensible default.
@@ -47,87 +51,104 @@ export function DriverProfile() {
     { icon: Call02Icon, label: 'Phone', value: profile?.phone_number },
   ]
 
-  const actions = [
-    { icon: CheckmarkBadge01Icon, label: 'Permit & Verification', onClick: () => setNotice('Vehicle permit verified. Epe campus zone approved.') },
-    { icon: HelpCircleIcon, label: 'Help & Support', onClick: () => setNotice('Our help centre is coming soon.') },
-  ]
-
   return (
     <DriverShell>
-      <div className="flex min-h-full flex-col gap-6 pb-36 pt-10 lg:pb-10 lg:pt-8">
-        {/* Profile header */}
-        <header className="flex items-center gap-4 rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
-          <span
-            aria-hidden
-            className="flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-700 dark:bg-brand-500/15 dark:text-brand-400"
-          >
-            {nameInitials(fullName) || 'D'}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="break-words text-lg font-bold leading-snug dark:text-slate-100">{fullName}</h1>
-            <p className="mt-0.5 break-words text-sm leading-relaxed text-ink-500 dark:text-slate-400">
-              {profile?.vehicle_plate || 'No plate set'} · {profile?.vehicle_type || 'Keke'}
-            </p>
+      <div className="flex min-h-full flex-col gap-5 pb-36 pt-10 lg:pb-10 lg:pt-8">
+        {/* Header — same pattern as the student Profile */}
+        <header className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Profile</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Your driver identity.</p>
           </div>
         </header>
 
-        {/* Driver stats */}
-        <section aria-label="Driver statistics" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <div className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
-              <span aria-hidden className={`size-2 rounded-full ${statusText === 'Offline' ? 'bg-ink-300 dark:bg-slate-600' : 'animate-pulse bg-brand-500'}`} />
-              Status
+        {/* Identity hero — borrows the student identity hero */}
+        <section
+          aria-label="Identity"
+          className="rounded-3xl bg-primary p-5 text-primary-foreground sm:p-6"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-xs font-bold uppercase tracking-wider">Driver account</p>
+            <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-2.5 py-0.5 text-xs font-semibold tabular-nums">
+              {!isAway && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-current" />}
+              {statusText}
             </span>
-            <p className="mt-1.5 text-xl font-bold">{statusText}</p>
           </div>
-          <div className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
-              <Car01Icon aria-hidden className="size-3.5 text-brand-600 dark:text-brand-400" />
-              Total trips
+
+          <div className="mt-4 flex min-w-0 items-center gap-4">
+            <span
+              aria-hidden
+              className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-lg font-bold"
+            >
+              {nameInitials(fullName) || 'D'}
             </span>
-            <p className="mt-1.5 text-2xl font-bold">{history.length}</p>
-          </div>
-          <div className="col-span-2 rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E] lg:col-span-1">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-slate-400">
-              <StarIcon aria-hidden className="size-3.5 fill-keke-500 text-keke-500" />
-              Rating
-            </span>
-            <p className="mt-1.5 text-2xl font-bold">
-              {ratingLabel}
-              {profile && profile.rating_count > 0 && (
-                <span className="ml-1.5 text-xs font-medium text-ink-500 dark:text-slate-400">
-                  ({profile.rating_count})
-                </span>
+            <div className="min-w-0 flex-1">
+              <p className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-xl font-bold tracking-tight">{fullName}</span>
+                <CheckmarkBadge01Icon aria-label="Verified driver" className="size-5 shrink-0 opacity-80" />
+              </p>
+              <p className="mt-0.5 truncate text-sm opacity-80">
+                {[profile?.vehicle_plate, profile?.vehicle_type].filter(Boolean).join(' · ') || 'Campus driver'}
+              </p>
+              {profile?.email && (
+                <p className="mt-1 truncate font-mono text-[13px] tabular-nums opacity-70">{profile.email}</p>
               )}
-            </p>
+            </div>
           </div>
+        </section>
+
+        {/* Stats — same grid as the student Profile */}
+        <section aria-label="Driver stats" className="grid grid-cols-3 gap-3">
+          <Card className="min-w-0 p-4">
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
+            <p className="mt-1.5 flex items-center gap-1.5 text-2xl font-bold text-foreground">
+              {!isAway && <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full bg-primary" />}
+              <span className="truncate">{statusText}</span>
+            </p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {profile?.availability_status === 'BUSY' ? 'ride active' : 'availability'}
+            </p>
+          </Card>
+          <Card className="min-w-0 p-4">
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Trips</p>
+            <p className="mt-1.5 font-mono text-2xl font-bold tabular-nums text-foreground">{history.length}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">total trips</p>
+          </Card>
+          <Card className="min-w-0 p-4">
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rating</p>
+            <p className="mt-1.5 flex items-center gap-1.5 text-2xl font-bold text-foreground">
+              <StarIcon aria-hidden className="size-5 shrink-0 fill-amber-400 text-amber-400" />
+              <span className="truncate tabular-nums">{ratingLabel}</span>
+            </p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {profile && profile.rating_count > 0 ? `${profile.rating_count} reviews` : 'no reviews yet'}
+            </p>
+          </Card>
         </section>
 
         {notice && (
-          <p role="status" className="rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-3 text-sm text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
-            {notice}
-          </p>
+          <Alert tone="info" className="break-words">{notice}</Alert>
         )}
 
-        {/* Details */}
-        <section aria-label="Driver details" className="rounded-3xl border border-ink-200/70 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#1E1E1E]">
-          <dl className="divide-y divide-ink-100 dark:divide-white/5">
+        {/* Driver details — same list as the student details card */}
+        <Card className="p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Driver details</p>
+          <dl className="mt-1 divide-y divide-border">
             {rows.map((row) => (
-              <div
-                key={row.label}
-                className="flex flex-col gap-1 py-4 first:pt-0 last:pb-0 md:flex-row md:items-center md:gap-3 md:py-3"
-              >
-                <dt className="flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">
-                  <row.icon aria-hidden className="size-4 shrink-0 text-ink-400 dark:text-slate-400" />
-                  {row.label}
-                </dt>
-                <dd className="min-w-0 break-words text-sm font-medium leading-relaxed text-ink-800 dark:text-slate-200">
-                  {row.value || '—'}
-                </dd>
+              <div key={row.label} className="flex items-center gap-3 py-3.5 last:pb-0">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted">
+                  <row.icon aria-hidden className="size-5 text-muted-foreground" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                  <dd className="mt-0.5 min-w-0 break-words text-sm font-semibold leading-relaxed text-foreground">
+                    {row.value || '—'}
+                  </dd>
+                </div>
               </div>
             ))}
           </dl>
-        </section>
+        </Card>
 
         {/* Payout account */}
         <section aria-label="Payout account">
@@ -142,45 +163,53 @@ export function DriverProfile() {
           />
         </section>
 
-        {/* Actions */}
-        <section aria-label="Account actions" className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200/70 bg-white shadow-sm dark:divide-white/5 dark:border-slate-800 dark:bg-[#1E1E1E]">
-          {actions.map((action) => (
-            <div key={action.label}>
+        {/* Settings — same row affordance as the student Profile */}
+        <section aria-label="Settings">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Settings</h2>
+          <Card className="overflow-hidden p-0">
+            <div className="divide-y divide-border">
               <button
                 type="button"
-                onClick={action.onClick}
-                className="flex w-full items-center gap-3 px-5 py-3.5 text-left text-sm font-medium text-ink-800 hover:bg-ink-50 dark:text-slate-200 dark:hover:bg-white/5"
+                onClick={() => setNotice('Vehicle permit verified. Epe campus zone approved.')}
+                className="group flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-muted"
               >
-                <action.icon aria-hidden className="size-4.5 shrink-0 text-brand-600 dark:text-brand-400" />
-                {action.label}
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover:bg-background">
+                  <CheckmarkBadge01Icon aria-hidden className="size-4.5 text-muted-foreground" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">Permit &amp; Verification</span>
               </button>
-              {action.label === 'Help & Support' && (
-                <div className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-sm font-medium text-ink-800 dark:text-slate-200">
-                  <span className="flex items-center gap-3">
-                    <Moon01Icon aria-hidden className="size-4.5 shrink-0 text-brand-600 dark:text-brand-400" />
-                    Dark Mode
-                  </span>
-                  <ThemeToggle />
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setNotice('Our help centre is coming soon.')}
+                className="group flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-muted"
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover:bg-background">
+                  <HelpCircleIcon aria-hidden className="size-4.5 text-muted-foreground" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">Help &amp; Support</span>
+              </button>
+              <div className="flex w-full items-center gap-3 px-5 py-4">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                  <Moon01Icon aria-hidden className="size-4.5 text-muted-foreground" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">Dark Mode</span>
+                <ThemeToggle />
+              </div>
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setConfirmLogout(true)}
-            className="flex w-full items-center gap-3 px-5 py-3.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
-          >
-            <Logout01Icon aria-hidden className="size-4.5 shrink-0" />
-            Logout
-          </button>
+          </Card>
         </section>
 
-        <p className="pb-2 text-center text-xs text-ink-400 dark:text-slate-500">Rydepus · Campus Shuttle (MVP)</p>
+        <Button variant="danger" size="lg" fullWidth onClick={() => setConfirmLogout(true)} className={cn('mt-1')}>
+          <Logout01Icon aria-hidden className="size-5" />
+          Log Out
+        </Button>
+
+        <p className="pb-2 text-center text-xs text-muted-foreground">Rydepus · Campus Shuttle (MVP)</p>
       </div>
 
       {/* Logout confirm modal */}
       <Modal open={confirmLogout} onClose={() => setConfirmLogout(false)} title="Log out?">
-        <p className="text-sm text-ink-600">You will need to sign in again to use Rydepus.</p>
+        <p className="text-sm text-muted-foreground">You will need to sign in again to use Rydepus.</p>
         <div className="mt-5 flex gap-3">
           <Button variant="outline" fullWidth onClick={() => setConfirmLogout(false)}>
             Stay
