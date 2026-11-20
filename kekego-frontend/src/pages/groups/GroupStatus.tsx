@@ -13,6 +13,9 @@ import {
   CheckmarkCircle02Icon,
   CircleIcon,
   AlertCircleIcon,
+  Copy01Icon,
+  Tick01Icon,
+  Share08Icon,
 } from 'hugeicons-react'
 import { useApp } from '../../context/AppContext'
 import { isGroupCancellationLocked } from '../../utils/rideStatus'
@@ -38,8 +41,8 @@ export function GroupStatus() {
   const [buyOutOpen, setBuyOutOpen] = useState(false)
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState<string | null>(null)
-  // Empty means "every empty seat"; a number pays for only that many.
   const [buyOutSeats, setBuyOutSeats] = useState(0)
+  const [copied, setCopied] = useState(false)
 
   // Brief toast for the "pool is full" notice: shows on arrival, hides itself.
   const noticeId = group?.id
@@ -329,56 +332,81 @@ export function GroupStatus() {
         <CancellationLockedNotice tripId={group.tripId} />
       ) : (
         <section aria-label="Passengers and actions" className="rounded-3xl border border-border bg-card p-5 sm:p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-foreground">Passengers</h2>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-sm font-semibold text-foreground">
-              <UserGroupIcon aria-hidden className="size-4" />
-              {occupied}/{group.maxSize}
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <h2 className="truncate text-base font-bold text-foreground">Passengers</h2>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-sm font-semibold text-foreground">
+              <UserGroupIcon aria-hidden className="size-4 shrink-0" />
+              <span className="tabular-nums whitespace-nowrap">
+                {occupied}/{group.maxSize}
+              </span>
             </span>
+          </div>
+
+          {/* Seat fill progress */}
+          <div
+            className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={occupied}
+            aria-valuemin={0}
+            aria-valuemax={group.maxSize}
+            aria-label={`${occupied} of ${group.maxSize} seats filled`}
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${group.maxSize > 0 ? (occupied / group.maxSize) * 100 : 0}%` }}
+            />
           </div>
 
           <ul className="mt-2 divide-y divide-border">
             {group.members.map((member) => (
-              <li key={member.id} className="flex items-center gap-2.5 py-2.5">
+              <li key={member.id} className="flex min-w-0 items-center gap-2.5 py-2.5">
                 <CheckmarkCircle02Icon aria-hidden className="size-5 shrink-0 text-primary" />
-                <span className="truncate text-sm font-medium text-foreground">{member.name}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                  {member.name}
+                </span>
                 {member.isCurrentUser && (
-                  <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground">
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-foreground">
                     You
                   </span>
                 )}
               </li>
             ))}
             {Array.from({ length: Math.max(0, group.maxSize - occupied) }, (_, i) => (
-              <li key={`empty-${i}`} className="flex items-center gap-2.5 py-2.5">
+              <li key={`empty-${i}`} className="flex min-w-0 items-center gap-2.5 py-2.5">
                 <CircleIcon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
-                <span className="truncate text-sm text-muted-foreground">Empty seat</span>
+                <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">Empty seat</span>
+                <span className="shrink-0 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-muted-foreground">
+                  Open
+                </span>
               </li>
             ))}
           </ul>
 
-          <p className="mt-3 rounded-xl bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-muted-foreground">
-            {waiting > 0 ? (
-              <>
-                Your group needs{' '}
-                <strong className="text-foreground">
-                  {waiting} more passenger{waiting === 1 ? '' : 's'}
-                </strong>{' '}
-                before a driver is matched.
-              </>
-            ) : (
-              <>
-                All <strong className="text-foreground">{group.maxSize} seats</strong> are taken
-                {group.boughtSeats > 0 && ' (including the seats you paid for)'}.
-              </>
-            )}
+          <p className="mt-3 flex items-start gap-2 rounded-2xl bg-muted px-3.5 py-2.5 text-sm leading-relaxed break-words text-muted-foreground">
+            <UserGroupIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <span className="min-w-0">
+              {waiting > 0 ? (
+                <>
+                  Your group needs{' '}
+                  <strong className="whitespace-nowrap text-foreground">
+                    {waiting} more passenger{waiting === 1 ? '' : 's'}
+                  </strong>{' '}
+                  before a driver is matched.
+                </>
+              ) : (
+                <>
+                  All <strong className="text-foreground">{group.maxSize} seats</strong> are taken
+                  {group.boughtSeats > 0 && ' (including the seats you paid for)'}.
+                </>
+              )}
+            </span>
           </p>
 
           {waiting > 0 && (
             <Button
               size="lg"
               fullWidth
-              className="mt-3"
+              className="mt-3 min-w-0"
               onClick={() => {
                 setBuyError(null)
                 // Default to filling everything, the usual reason to open this.
@@ -386,29 +414,91 @@ export function GroupStatus() {
                 setBuyOutOpen(true)
               }}
             >
-              <CreditCardIcon aria-hidden className="size-4" />
-              Fill empty seats — up to {formatCurrency(buyOutTotal)}
+              <CreditCardIcon aria-hidden className="size-4 shrink-0" />
+              <span className="min-w-0 truncate">Fill empty seats</span>
+              <span className="shrink-0 font-bold whitespace-nowrap tabular-nums">
+                · up to {formatCurrency(buyOutTotal)}
+              </span>
             </Button>
           )}
 
-          <div className="mt-4 flex flex-col gap-2.5">
-            <Button size="lg" fullWidth variant="outline" disabled={busy}>
-              <UserGroupIcon aria-hidden className="size-4" />
-              {occupied}/{group.maxSize} — share this group's code{' '}
-              <span className="font-bold">{group.code}</span>
-            </Button>
-            <div className="grid grid-cols-2 gap-2.5">
-              <Button size="lg" fullWidth variant="outline" loading={leaving} onClick={handleLeave}>
-                <Logout01Icon aria-hidden className="size-4" />
-                Leave Group
+          <div className="mt-3 rounded-2xl border border-dashed border-border bg-muted/40 p-3.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-card text-muted-foreground">
+                <Share08Icon aria-hidden className="size-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                  Group code · {occupied}/{group.maxSize} joined
+                </p>
+                <p className="truncate font-mono text-xl font-bold tracking-[0.2em] text-foreground">
+                  {group.code}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  Share this code to fill seats faster
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const done = () => {
+                    setCopied(true)
+                    window.setTimeout(() => setCopied(false), 2000)
+                  }
+                  if (navigator.clipboard?.writeText) {
+                    void navigator.clipboard.writeText(group.code).then(done).catch(done)
+                  } else {
+                    const field = document.createElement('textarea')
+                    field.value = group.code
+                    document.body.appendChild(field)
+                    field.select()
+                    try {
+                      document.execCommand('copy')
+                    } finally {
+                      document.body.removeChild(field)
+                    }
+                    done()
+                  }
+                }}
+                className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                {copied ? (
+                  <Tick01Icon aria-hidden className="size-4 shrink-0" />
+                ) : (
+                  <Copy01Icon aria-hidden className="size-4 shrink-0" />
+                )}
+                <span className="whitespace-nowrap">{copied ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex min-w-0 flex-col gap-2.5">
+            <div className="grid min-w-0 grid-cols-2 gap-2.5">
+              <Button
+                size="md"
+                fullWidth
+                variant="outline"
+                loading={leaving}
+                onClick={handleLeave}
+                className="min-w-0 px-3"
+              >
+                <Logout01Icon aria-hidden className="size-4 shrink-0" />
+                <span className="min-w-0 truncate">Leave Group</span>
               </Button>
-              <Button size="lg" fullWidth variant="danger" loading={busy} onClick={handleCancel}>
-                <Cancel01Icon aria-hidden className="size-4" />
-                Cancel Request
+              <Button
+                size="md"
+                fullWidth
+                variant="danger"
+                loading={busy}
+                onClick={handleCancel}
+                className="min-w-0 px-3"
+              >
+                <Cancel01Icon aria-hidden className="size-4 shrink-0" />
+                <span className="min-w-0 truncate">Cancel Request</span>
               </Button>
             </div>
             {cancelError && (
-              <Alert tone="error" className="mt-1">
+              <Alert tone="error" className="mt-1 break-words">
                 {cancelError}
               </Alert>
             )}

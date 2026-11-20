@@ -126,7 +126,7 @@ export function Home() {
         <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
             {/* Left: route fields */}
-            <div>
+            <div className="min-w-0">
               <div className="flex gap-3">
                 {/* Route rail */}
                 <div aria-hidden className="flex flex-col items-center pt-5">
@@ -183,8 +183,8 @@ export function Home() {
               </div>
 
               {/* Popular destinations */}
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-sm text-muted-foreground">Popular</span>
+              <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2">
+                <span className="mr-1 shrink-0 text-sm text-muted-foreground">Popular</span>
                 {POPULAR_IDS.map((id) => {
                   const loc = CAMPUS_LOCATIONS.find((l) => l.id === id)
                   if (!loc) return null
@@ -196,7 +196,7 @@ export function Home() {
                       onClick={() => handlePopular(id)}
                       aria-pressed={active}
                       className={cn(
-                        'rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors',
+                        'min-w-0 max-w-full rounded-full border px-3 py-1.5 text-left text-sm font-semibold break-words whitespace-normal transition-colors sm:px-3.5 sm:py-2',
                         active
                           ? 'border-primary bg-primary text-primary-foreground'
                           : 'border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground',
@@ -216,7 +216,7 @@ export function Home() {
             </div>
 
             {/* Right: seats + CTA */}
-            <div className="rounded-2xl bg-muted p-4 sm:p-5">
+            <div className="min-w-0 rounded-2xl bg-muted p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Seats you need
@@ -231,10 +231,10 @@ export function Home() {
                     onClick={() => setSeats(n)}
                     aria-pressed={seats === n}
                     className={cn(
-                      'rounded-xl border py-2.5 text-sm font-bold transition-colors',
+                      'rounded-xl border py-2.5 text-sm font-bold transition-[border-color] active:scale-[0.97]',
                       seats === n
                         ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground',
+                        : 'border-border bg-card text-foreground hover:border-foreground/40',
                     )}
                   >
                     {n}
