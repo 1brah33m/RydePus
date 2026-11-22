@@ -21,6 +21,8 @@ export interface ApiGroupMember {
   id: number
   name: string
   is_creator: boolean
+  /** Seats this member is accountable for: own seat plus bought-out extras. */
+  seats?: number
 }
 
 export interface ApiGroup {
@@ -67,7 +69,7 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
   const members: GroupMember[] = api.members.map((m) => ({
     id: String(m.id),
     name: m.name,
-    seats: 1,
+    seats: Math.max(1, m.seats ?? 1),
     isCurrentUser: currentMemberId !== undefined && String(m.id) === currentMemberId,
     isCreator: m.is_creator,
   }))

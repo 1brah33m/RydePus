@@ -152,14 +152,37 @@ class GroupSerializer(serializers.ModelSerializer):
         return obj.created_by.full_name
 
     def get_members(self, obj):
+        """Members with the seats each is accountable for (own + bought-out).
+
+        The per-payer buyout map travels in the serializer context for list
+        views (one query for all groups); detail views fall back to a single
+        grouped query for that group.
+        """
+        extras = self._buyout_seats_by_payer(obj)
         return [
             {
                 "id": m.user_id,
                 "name": m.user.full_name,
                 "is_creator": m.user_id == obj.created_by_id,
+                "seats": 1 + extras.get(m.user_id, 0),
             }
             for m in obj.members.all()
         ]
+
+    def _buyout_seats_by_payer(self, obj) -> dict:
+        """Extra (bought-out) seats committed by each payer in this group."""
+        by_group = self.context.get("buyouts_by_group")
+        if by_group is not None:
+            return by_group.get(obj.id, {})
+        totals = (
+            obj.payments.filter(
+                kind=Payment.Kind.GROUP_BUYOUT,
+                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+            )
+            .values("payer_id")
+            .annotate(total=Coalesce(Sum("seats"), 0))
+        )
+        return {row["payer_id"]: row["total"] for row in totals}
 
     def get_my_membership(self, obj):
         request = self.context.get("request")
@@ -281,10 +304,23 @@ class GroupListView(APIView):
             )
         )
         my_group_ids = set(request.user.group_memberships.values_list("group_id", flat=True))
+        # Per-payer buyout totals for every listed group in one query, so the
+        # per-member seat counts do not cost a query per group.
+        buyouts_by_group: dict = {}
+        for row in (
+            Payment.objects.filter(
+                group__in=groups,
+                kind=Payment.Kind.GROUP_BUYOUT,
+                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+            )
+            .values("group_id", "payer_id")
+            .annotate(total=Coalesce(Sum("seats"), 0))
+        ):
+            buyouts_by_group.setdefault(row["group_id"], {})[row["payer_id"]] = row["total"]
         serializer = GroupSerializer(
             groups,
             many=True,
-            context={"request": request, "my_group_ids": my_group_ids},
+            context={"request": request, "my_group_ids": my_group_ids, "buyouts_by_group": buyouts_by_group},
         )
         return Response(serializer.data)
 

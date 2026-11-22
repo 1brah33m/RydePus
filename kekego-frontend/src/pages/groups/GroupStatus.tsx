@@ -483,6 +483,11 @@ export function GroupStatus() {
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                   {member.name}
                 </span>
+                {(member.seats ?? 1) > 1 && (
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-foreground">
+                    {member.seats} seats
+                  </span>
+                )}
                 {member.isCurrentUser && (
                   <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-foreground">
                     You

@@ -758,6 +758,10 @@ def test_joiner_picking_one_seat_gets_exactly_one_seat(student_client, student_u
     assert body["seats_filled"] == 3
     assert body["remaining_seats"] == 1
     assert not Payment.objects.filter(group_id=group_id, payer=joiner).exists()
+    # The payload itself shows who holds the extra seat: creator 2, joiner 1.
+    seats_by_id = {m["id"]: m["seats"] for m in body["members"]}
+    assert seats_by_id[student_user.id] == 2
+    assert seats_by_id[joiner.id] == 1
 
 
 @pytest.mark.django_db
