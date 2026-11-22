@@ -20,6 +20,7 @@ import { formatCurrency } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
 import { MembershipBlockModal } from '../../components/groups/MembershipBlockModal'
+import { JoinSeatsModal } from '../../components/groups/JoinSeatsModal'
 import { cn } from '../../utils/cn'
 
 export function GroupStatus() {
@@ -37,6 +38,8 @@ export function GroupStatus() {
   const [blockedOpen, setBlockedOpen] = useState(false)
   const [blockLeaving, setBlockLeaving] = useState(false)
   const [blockWarning, setBlockWarning] = useState<string | null>(null)
+  const [seatPickerOpen, setSeatPickerOpen] = useState(false)
+  const [pendingJoinSeats, setPendingJoinSeats] = useState(1)
   const [leaveBlocked, setLeaveBlocked] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
   const [dismissedNoticeFor, setDismissedNoticeFor] = useState<string | null>(null)
@@ -154,18 +157,32 @@ export function GroupStatus() {
     }
   }
 
-  /** Join a shared group, then open it. Surfaces errors instead of swallowing them. */
-  const handleJoin = async () => {
+  /** Join button: blocked members go to the switch-group flow, otherwise the
+   * joiner explicitly picks how many seats to pay for — never auto-assigned. */
+  const handleJoinClick = () => {
     // Already in a different group: offer to view it or leave it first,
     // instead of firing a request that the server must reject.
     if (activeGroup && activeGroup.id !== group.id) {
+      setPendingJoinSeats(1)
       setBlockedOpen(true)
       return
     }
+    setJoinError(null)
+    if (waiting > 1) {
+      setPendingJoinSeats(1)
+      setSeatPickerOpen(true)
+      return
+    }
+    void handleJoin(1)
+  }
+
+  /** Join a shared group with the explicitly chosen seat count, then open it.
+   * Surfaces errors instead of swallowing them. */
+  const handleJoin = async (seats = 1) => {
     setJoining(true)
     setJoinError(null)
     try {
-      const joined = await joinGroup(group.id)
+      const joined = await joinGroup(group.id, seats)
       navigate(`/groups/${joined.id}`, { replace: true })
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : 'Could not join this group. Please try again.')
@@ -186,9 +203,16 @@ export function GroupStatus() {
     try {
       await leaveGroup(activeGroup.id)
       setBlockedOpen(false)
+      setBlockLeaving(false)
+      // After leaving, the joiner still picks their own seat count — never
+      // inherit anything automatically.
+      if (waiting > 1) {
+        setSeatPickerOpen(true)
+        return
+      }
       setJoining(true)
       try {
-        const joined = await joinGroup(group.id)
+        const joined = await joinGroup(group.id, pendingJoinSeats)
         navigate(`/groups/${joined.id}`, { replace: true })
       } catch (err) {
         setJoinError(err instanceof Error ? err.message : 'Could not join this group. Please try again.')
@@ -377,13 +401,26 @@ export function GroupStatus() {
               </Alert>
             )}
             <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <Button size="lg" fullWidth loading={joining} onClick={handleJoin}>
+              <Button size="lg" fullWidth loading={joining} onClick={handleJoinClick}>
                 Join pool — {formatCurrency(perSeat)} a seat
               </Button>
               <Button size="lg" variant="outline" onClick={() => navigate('/home')}>
                 Back to Home
               </Button>
             </div>
+            <JoinSeatsModal
+              open={seatPickerOpen}
+              max={waiting}
+              perSeat={perSeat}
+              initial={1}
+              joining={joining}
+              onClose={() => setSeatPickerOpen(false)}
+              onConfirm={(seats) => {
+                setPendingJoinSeats(seats)
+                setSeatPickerOpen(false)
+                void handleJoin(seats)
+              }}
+            />
             <MembershipBlockModal
               open={blockedOpen}
               code={activeGroup?.code ?? ''}

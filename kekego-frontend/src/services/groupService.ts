@@ -155,14 +155,15 @@ export class GroupService {
   }
 
   /**
-   * Join an existing group. Always reserves exactly one seat (the joiner's
-   * own). Extra seats are never auto-assigned here; the joiner uses the
-   * explicit buyout flow if they want to fill empty seats.
+   * Join an existing group, claiming the explicitly chosen `seats` count
+   * (defaults to just your own). The count must come from the join seat
+   * picker — never inferred from another member — and the backend rejects a
+   * count that would overflow the keke.
    */
-  async joinGroup(groupId: string, currentMemberId?: string): Promise<Group> {
+  async joinGroup(groupId: string, currentMemberId?: string, seats = 1): Promise<Group> {
     const api = await apiClient.post<ApiGroup>(
       `/groups/${groupId}/join/`,
-      { currency: CURRENCY },
+      { seats: Math.max(1, Math.trunc(seats)), currency: CURRENCY },
       { auth: true },
     )
     return mapGroup(api, currentMemberId)

@@ -576,12 +576,8 @@ def test_group_creation_with_all_four_seats_is_dispatchable(student_client):
 
 
 @pytest.mark.django_db
-def test_joining_with_a_seat_count_reserves_only_a_single_seat(student_user):
-    """Joining always reserves exactly one seat; ``seats`` is ignored.
-
-    Regression test: a creator covering 2 seats must not cause a joiner to
-    auto-cover 2 seats as well. Extra seats are filled via explicit buyout.
-    """
+def test_joining_with_a_seat_count_reserves_that_many_seats(student_user):
+    """An explicitly chosen seat count is honoured (join prompt choice)."""
     group = Group.objects.create(
         name="Bring Friends",
         pickup_location="Gate",
@@ -602,14 +598,16 @@ def test_joining_with_a_seat_count_reserves_only_a_single_seat(student_user):
 
     assert response.status_code == status.HTTP_200_OK
     body = response.json()
-    # Only the joiner's own seat is claimed, even though seats=2 was sent.
+    # Two seats claimed: the joiner's own plus one explicitly chosen extra.
     assert body["member_count"] == 2
-    assert body["seats_filled"] == 2
-    assert body["remaining_seats"] == 2
+    assert body["seats_filled"] == 3
+    assert body["remaining_seats"] == 1
 
     assert GroupMember.objects.filter(group=group, user=joiner).exists()
-    # No seat commitment is recorded on join; buyout is a separate step.
-    assert not Payment.objects.filter(group=group, payer=joiner).exists()
+    payment = Payment.objects.get(group=group, payer=joiner, kind=Payment.Kind.GROUP_BUYOUT)
+    assert payment.seats == 1
+    # One consolidated charge: own seat + one carried seat.
+    assert payment.amount == group.fare_per_seat * 2
 
 
 @pytest.mark.django_db
@@ -641,8 +639,8 @@ def test_join_defaults_to_a_single_seat(student_user):
 
 
 @pytest.mark.django_db
-def test_joining_with_one_seat_left_succeeds(student_user):
-    """A single-seat join fits the last open seat; ``seats`` is ignored."""
+def test_joining_cannot_overflow_capacity(student_user):
+    """A chosen count above the empty seats is rejected; nothing allocated."""
     group = Group.objects.create(
         name="Nearly Full",
         pickup_location="Gate",
@@ -670,8 +668,48 @@ def test_joining_with_one_seat_left_succeeds(student_user):
     client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
     client.force_authenticate(joiner)
 
-    # Even though the old client asks for 2 seats, only 1 is reserved.
     response = client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 2}, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["error"]["code"] == "INVALID"
+    # Nothing was allocated: no membership, no seat commitment, seats unchanged.
+    assert not GroupMember.objects.filter(group=group, user=joiner).exists()
+    assert not Payment.objects.filter(group=group, payer=joiner).exists()
+    group.refresh_from_db()
+    assert group.seats_filled == 3
+
+
+@pytest.mark.django_db
+def test_joining_with_one_seat_left_succeeds(student_user):
+    """Choosing 1 seat with one seat left succeeds."""
+    group = Group.objects.create(
+        name="Last Seat",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    for index in range(2):
+        GroupMember.objects.create(
+            group=group,
+            user=User.objects.create_user(
+                email=f"lastseat{index}@example.com",
+                password="StrongPass123!",
+                role=User.Role.STUDENT,
+            ),
+        )
+    group.refresh_status()
+    assert group.seats_filled == 3
+
+    joiner = User.objects.create_user(
+        email="lastseatjoiner@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+
+    response = client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 1}, format="json")
 
     assert response.status_code == status.HTTP_200_OK
     assert GroupMember.objects.filter(group=group, user=joiner).exists()
@@ -718,8 +756,8 @@ def test_joining_a_full_group_is_rejected(student_user):
 
 
 @pytest.mark.django_db
-def test_joining_alone_does_not_dispatch_a_half_empty_group(student_user):
-    """A single-seat join cannot fill the keke on its own; buyout dispatches."""
+def test_joining_enough_seats_to_fill_the_group_dispatches(student_user):
+    """An explicit 3-seat choice on a 1-member group fills the keke."""
     group = Group.objects.create(
         name="Fill On Join",
         pickup_location="East Gate",
@@ -740,18 +778,18 @@ def test_joining_alone_does_not_dispatch_a_half_empty_group(student_user):
     client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
     client.force_authenticate(joiner)
 
-    # Even though the old client asks for 3 seats, only 1 is reserved.
+    # One member (the creator) plus three explicitly chosen seats fills the keke.
     response = client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 3}, format="json")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["seats_filled"] == 2
-    assert response.json()["remaining_seats"] == 2
-    assert response.json()["status"] == Group.Status.WAITING
+    assert response.json()["seats_filled"] == 4
+    assert response.json()["status"] == Group.Status.FULL
 
     group.refresh_from_db()
-    assert group.status == Group.Status.WAITING
-    assert not Trip.objects.filter(group=group).exists()
-    assert not Payment.objects.filter(group=group, payer=joiner).exists()
+    assert group.status == Group.Status.FULL
+    trip = Trip.objects.get(group=group)
+    assert trip.status == Trip.Status.PENDING
+    assert trip.driver_id is None
 
 
 @pytest.mark.django_db

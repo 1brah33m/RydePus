@@ -6,6 +6,7 @@ import { useGroupJoin } from '../../hooks/useGroupJoin'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
 import { MembershipBlockModal } from '../../components/groups/MembershipBlockModal'
+import { JoinSeatsModal } from '../../components/groups/JoinSeatsModal'
 import { cn } from '../../utils/cn'
 import { formatCurrency } from '../../utils/format'
 import type { Group } from '../../types'
@@ -30,7 +31,7 @@ function isOpenGroup(status: string, occupied: number, maxSize: number): boolean
 
 export function GroupsPage() {
   const { activeGroup, allPendingGroups } = useApp()
-  const { joiningId, blockedGroupId, leaving, leaveBlocked, leaveError, joinError, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissLeaveError, dismissJoinError } =
+  const { joiningId, blockedGroupId, seatPrompt, leaving, leaveBlocked, leaveError, joinError, requestJoin, confirmJoinSeats, dismissSeatPrompt, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissLeaveError, dismissJoinError } =
     useGroupJoin()
 
   const [filter, setFilter] = useState<Filter>('all')
@@ -157,7 +158,7 @@ export function GroupsPage() {
         {visibleGroups.length > 0 ? (
           <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
             {visibleGroups.map((group) => (
-              <GroupCard key={group.id} group={group} joining={joiningId === group.id} onJoin={() => join(group.id)} />
+              <GroupCard key={group.id} group={group} joining={joiningId === group.id} onJoin={() => requestJoin(group.id, group.remainingSeats, group.farePerSeat)} />
             ))}
           </div>
         ) : (
@@ -198,6 +199,17 @@ export function GroupsPage() {
         onViewGroup={viewActiveGroup}
         onLeaveGroup={leaveAndJoin}
       />
+      {seatPrompt && (
+        <JoinSeatsModal
+          open
+          max={seatPrompt.max}
+          perSeat={seatPrompt.perSeat}
+          initial={seatPrompt.initial}
+          joining={joiningId === seatPrompt.groupId}
+          onClose={dismissSeatPrompt}
+          onConfirm={(seats) => void confirmJoinSeats(seats)}
+        />
+      )}
     </div>
   )
 }

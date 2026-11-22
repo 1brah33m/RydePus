@@ -12,13 +12,14 @@ import { Card } from '../../components/ui/Card'
 import { Alert } from '../../components/ui/Alert'
 import { GroupCard } from '../../components/groups/GroupCard'
 import { MembershipBlockModal } from '../../components/groups/MembershipBlockModal'
+import { JoinSeatsModal } from '../../components/groups/JoinSeatsModal'
 import { RouteIndicator } from '../../components/shared/RouteIndicator'
 
 export function FindRide() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { groupsByRoute, createGroup, activeGroup, leaveGroup } = useApp()
-  const { joiningId, blockedGroupId, leaving, leaveBlocked, leaveError, joinError, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissLeaveError, dismissJoinError } =
+  const { joiningId, blockedGroupId, seatPrompt, leaving, leaveBlocked, leaveError, joinError, requestJoin, confirmJoinSeats, dismissSeatPrompt, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissLeaveError, dismissJoinError } =
     useGroupJoin()
 
   const pickupId = params.get('pickup') ?? ''
@@ -137,7 +138,14 @@ export function FindRide() {
                   key={group.id}
                   group={group}
                   joining={joiningId === group.id}
-                  onJoin={() => join(group.id)}
+                  onJoin={() =>
+                    requestJoin(
+                      group.id,
+                      group.remainingSeats,
+                      group.farePerSeat,
+                      Math.min(seats, Math.max(1, group.remainingSeats)),
+                    )
+                  }
                 />
               ))}
             </div>
@@ -189,6 +197,17 @@ export function FindRide() {
         onViewGroup={viewActiveGroup}
         onLeaveGroup={leaveAndJoin}
       />
+      {seatPrompt && (
+        <JoinSeatsModal
+          open
+          max={seatPrompt.max}
+          perSeat={seatPrompt.perSeat}
+          initial={seatPrompt.initial}
+          joining={joiningId === seatPrompt.groupId}
+          onClose={dismissSeatPrompt}
+          onConfirm={(count) => void confirmJoinSeats(count)}
+        />
+      )}
     </>
   )
 }

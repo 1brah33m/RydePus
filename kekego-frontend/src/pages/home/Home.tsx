@@ -14,6 +14,7 @@ import { formatCurrency } from '../../utils/format'
 import { LocationDropdown } from '../../components/ui/LocationDropdown'
 import { Alert } from '../../components/ui/Alert'
 import { MembershipBlockModal } from '../../components/groups/MembershipBlockModal'
+import { JoinSeatsModal } from '../../components/groups/JoinSeatsModal'
 import type { SelectOption } from '../../components/ui/Select'
 import { cn } from '../../utils/cn'
 
@@ -37,11 +38,14 @@ export function Home() {
   const {
     joiningId,
     blockedGroupId,
+    seatPrompt,
     leaving,
     leaveBlocked,
     leaveError,
     joinError,
-    join,
+    requestJoin,
+    confirmJoinSeats,
+    dismissSeatPrompt,
     dismissBlock,
     viewActiveGroup,
     leaveAndJoin,
@@ -102,11 +106,11 @@ export function Home() {
     setError(null)
   }
 
-  const handlePoolOpen = async (group: Group) => {
-    // Route through the shared join guard so "already in a group" opens the
-    // membership modal and failures surface as an error instead of silently
-    // landing on the detail page.
-    await join(group.id)
+  const handlePoolOpen = (group: Group) => {
+    // Route through the shared join guard with an explicit seat picker, so
+    // "already in a group" opens the membership modal and extra seats are
+    // only ever covered by the joiner's own choice.
+    requestJoin(group.id, group.remainingSeats, group.farePerSeat)
   }
 
   const hour = new Date().getHours()
@@ -359,6 +363,17 @@ export function Home() {
         onViewGroup={viewActiveGroup}
         onLeaveGroup={leaveAndJoin}
       />
+      {seatPrompt && (
+        <JoinSeatsModal
+          open
+          max={seatPrompt.max}
+          perSeat={seatPrompt.perSeat}
+          initial={seatPrompt.initial}
+          joining={joiningId === seatPrompt.groupId}
+          onClose={dismissSeatPrompt}
+          onConfirm={(count) => void confirmJoinSeats(count)}
+        />
+      )}
     </div>
   )
 }

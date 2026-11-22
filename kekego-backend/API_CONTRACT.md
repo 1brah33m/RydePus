@@ -139,11 +139,13 @@ Throttle rates are set server-side via env (`DRF_THROTTLE_ANON`,
   already reflects the covered seats (`bought_seats`, `seats_filled`,
   `remaining_seats`, `own_seat_paid`). Clients never need a follow-up partial
   buyout after creating a group. Out-of-range `seats` returns `400`.
-- Joining (`POST /api/v1/groups/{id}/join/`) always reserves exactly one seat:
-  the joiner's own membership. Any `seats` field sent by older clients is
-  accepted but ignored — no extra seats are auto-assigned. To fill empty
-  seats the joiner uses the explicit buyout endpoint. Joining a full group
-  returns `400`, and nothing is allocated.
+- Joining (`POST /api/v1/groups/{id}/join/`) claims exactly the seats the joiner
+  explicitly chose in the join prompt (default 1, max `remaining_seats`):
+  their own membership plus `seats - 1` extra seats recorded as a
+  `GROUP_BUYOUT` commitment, so `seats_filled` rises by exactly the chosen
+  count and can never overflow past capacity. The count must never be inferred
+  from another member's choice. A count above `remaining_seats` (including
+  joining a full group) returns `400`, and nothing is allocated.
 - **Auto-dispatch.** As soon as a group reaches full capacity — the fourth member
   joins, a buyout covers the last seat, or a creator pays for all seats at
   creation — the server creates the ride request itself: a `PENDING` `Trip`
