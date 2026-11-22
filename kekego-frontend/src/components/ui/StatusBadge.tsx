@@ -40,10 +40,10 @@ function groupTone(status: GroupStatus): 'amber' | 'teal' | 'blue' | 'violet' | 
   }
 }
 
-function tripTone(status: TripStatus): 'amber' | 'teal' | 'blue' | 'green' | 'rose' {
+function tripTone(status: TripStatus): 'amber' | 'teal' | 'blue' | 'green' | 'rose' | 'ink' {
   switch (status) {
     case 'PENDING':
-      return 'amber'
+      return 'ink'
     case 'DRIVER_ASSIGNED':
     case 'DRIVER_ACCEPTED':
       return 'blue'

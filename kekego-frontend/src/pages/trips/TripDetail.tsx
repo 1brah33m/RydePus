@@ -128,8 +128,8 @@ export function TripDetail() {
         <AppHeader title="Trip completed" />
         <div className="flex flex-col gap-5 pb-10 pt-3">
           <Card className="p-5 text-center">
-            <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-brand-50 dark:bg-brand-500/10">
-              <CheckmarkCircle02Icon aria-hidden className="size-8 text-brand-700 dark:text-brand-300" />
+            <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-muted">
+              <CheckmarkCircle02Icon aria-hidden className="size-8 text-foreground" />
             </span>
             <h2 className="mt-4 text-xl font-bold text-ink-900 dark:text-slate-100">Trip Completed</h2>
             <RouteIndicator pickup={trip.pickup} destination={trip.destination} className="mt-2 justify-center" size="sm" />
@@ -364,15 +364,15 @@ function RouteProgress({
     <Card className="p-5">
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-slate-500">Status</span>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-3 py-1 text-xs font-bold text-white">
-          <span className="size-1.5 animate-pulse rounded-full bg-white" />
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">
+          <span className="size-1.5 animate-pulse rounded-full bg-primary-foreground" />
           {statusLabel}
         </span>
       </div>
 
       <div className="mt-4 flex items-stretch gap-3.5">
         <div className="flex flex-col items-center">
-          <span className="flex size-9 items-center justify-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+          <span className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <MapPinIcon aria-hidden className="size-4.5" />
           </span>
           <span aria-hidden className="w-0.5 flex-1 border-l-2 border-dashed border-ink-300 dark:border-slate-700" />

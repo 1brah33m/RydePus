@@ -63,13 +63,13 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
             </Alert>
           </div>
         ) : (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl bg-brand-50 p-4 dark:bg-brand-500/10">
-            <CheckmarkCircle02Icon aria-hidden className="mt-0.5 size-5 shrink-0 text-brand-700 dark:text-brand-300" />
+          <div className="mt-3 flex items-start gap-3 rounded-2xl bg-muted p-4">
+            <CheckmarkCircle02Icon aria-hidden className="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
-              <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">
+              <p className="text-sm font-semibold text-foreground">
                 {formatCurrency(payment.amount)} settled
               </p>
-              <p className="mt-0.5 text-sm text-brand-800/80 dark:text-brand-200/80">
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 Your {METHOD_LABELS[payment.method].toLowerCase()} payment for {payment.seats} seat
                 {payment.seats > 1 ? 's' : ''} is recorded. Thanks for riding with {driverName}.
               </p>
@@ -130,10 +130,10 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
                   'flex items-center gap-3 rounded-2xl border px-4 py-3 transition-colors',
                   disabled
                     ? 'cursor-not-allowed border-ink-100 bg-ink-50 opacity-60 dark:border-white/5 dark:bg-white/5'
-                    : 'cursor-pointer border-ink-200 hover:border-brand-300 dark:border-slate-700 dark:hover:border-brand-500',
+                    : 'cursor-pointer border-ink-200 hover:border-ring dark:border-slate-700',
                   method === option.value &&
                     !disabled &&
-                    'border-brand-500 bg-brand-50/60 dark:border-brand-500 dark:bg-brand-500/10',
+                    'border-primary bg-muted',
                 )}
               >
                 <input
@@ -149,7 +149,7 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
                   className={cn(
                     'flex size-9 shrink-0 items-center justify-center rounded-xl',
                     method === option.value && !disabled
-                      ? 'bg-brand-500 text-white'
+                      ? 'bg-primary text-primary-foreground'
                       : 'bg-ink-100 text-ink-500 dark:bg-white/10 dark:text-slate-300',
                   )}
                 >
@@ -165,7 +165,7 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
                   className={cn(
                     'flex size-5 shrink-0 items-center justify-center rounded-full border-2',
                     method === option.value && !disabled
-                      ? 'border-brand-500 bg-brand-500 text-white'
+                      ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-ink-300 dark:border-slate-600',
                   )}
                 >
@@ -178,8 +178,8 @@ export function ManualPaymentCard({ trip, driver, payment, seats, onPay }: Manua
       </fieldset>
 
       {method === 'BANK_TRANSFER' && bank && (
-        <div className="mt-4 rounded-2xl border border-brand-200 bg-brand-50/50 p-4 dark:border-brand-500/30 dark:bg-brand-500/5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">
+        <div className="mt-4 rounded-2xl border border-border bg-muted p-4 dark:bg-white/5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground">
             Send {formatCurrency(totalFare)} to
           </p>
           <dl className="mt-2.5 space-y-2.5 text-sm">

@@ -52,7 +52,7 @@ export function DriverCard({ driver, onCall, callLoading = false }: DriverCardPr
           type="button"
           onClick={onCall}
           disabled={callLoading}
-          className="mt-3.5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-ink-300 bg-white text-sm font-semibold text-ink-800 transition-colors hover:border-brand-500 hover:text-brand-700 disabled:opacity-50 dark:border-slate-700 dark:bg-[#1E1E1E] dark:text-slate-200 dark:hover:border-brand-400 dark:hover:text-brand-300"
+          className="mt-3.5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-ink-300 bg-white text-sm font-semibold text-ink-800 transition-colors hover:border-ring hover:text-foreground disabled:opacity-50 dark:border-slate-700 dark:bg-[#1E1E1E] dark:text-slate-200 dark:hover:text-white"
         >
           <Call02Icon aria-hidden className="size-4" />
           {callLoading ? 'Calling…' : 'Call Driver'}
