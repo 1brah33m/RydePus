@@ -515,7 +515,7 @@ export function GroupStatus() {
               ) : (
                 <>
                   All <strong className="text-foreground">{group.maxSize} seats</strong> are taken
-                  {group.boughtSeats > 0 && ' (including the seats you paid for)'}.
+                  {group.ownSeatPaid && ' (including the seats you paid for)'}.
                 </>
               )}
             </span>

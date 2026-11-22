@@ -719,6 +719,48 @@ def test_joining_with_one_seat_left_succeeds(student_user):
 
 
 @pytest.mark.django_db
+def test_joiner_picking_one_seat_gets_exactly_one_seat(student_client, student_user):
+    """Reported scenario: creator covers 2 seats, joiner picks 1 in the prompt.
+
+    The join must add exactly one filled seat and record no buyout for the
+    joiner — never a silent copy of the creator's count.
+    """
+    created = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Two Seat Creator",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 2,
+        },
+        format="json",
+    )
+    assert created.status_code == status.HTTP_201_CREATED
+    group_id = created.json()["id"]
+    assert created.json()["seats_filled"] == 2
+    assert created.json()["remaining_seats"] == 2
+
+    joiner = User.objects.create_user(
+        email="onepicker@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+
+    joined = client.post(f"{GROUPS_URL}{group_id}/join/", {"seats": 1}, format="json")
+
+    assert joined.status_code == status.HTTP_200_OK
+    body = joined.json()
+    assert body["member_count"] == 2
+    assert body["bought_seats"] == 1
+    assert body["seats_filled"] == 3
+    assert body["remaining_seats"] == 1
+    assert not Payment.objects.filter(group_id=group_id, payer=joiner).exists()
+
+
+@pytest.mark.django_db
 def test_joining_a_full_group_is_rejected(student_user):
     """With no open seats left, a join is refused."""
     group = Group.objects.create(
