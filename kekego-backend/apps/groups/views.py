@@ -1,5 +1,5 @@
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Exists, OuterRef, Prefetch, Q, Sum
+from django.db.models import Count, Exists, IntegerField, OuterRef, Prefetch, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import serializers, status
@@ -274,22 +274,29 @@ class GroupListView(APIView):
     def get(self, request):
         # One query for the groups, one for their members, one for this user's
         # memberships and the buyout totals: no per-group queries.
+        #
+        # NOTE: the buyout total MUST be a subquery, not Sum() over the joined
+        # members+payments tables: the join repeats every payment row once per
+        # member, so a plain Sum would count one bought seat N times for N
+        # members (e.g. 2 members + 1 bought seat read as 4/4 full).
+        bought_subquery = (
+            Payment.objects.filter(
+                group=OuterRef("pk"),
+                kind=Payment.Kind.GROUP_BUYOUT,
+                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+            )
+            .order_by()
+            .values("group")
+            .annotate(total=Coalesce(Sum("seats"), 0))
+            .values("total")
+        )
         groups = (
             Group.objects.all()
             .select_related("created_by")
             .prefetch_related(Prefetch("members", queryset=GroupMember.objects.select_related("user")))
             .annotate(
                 annotated_member_count=Count("members", distinct=True),
-                annotated_bought_seats=Coalesce(
-                    Sum(
-                        "payments__seats",
-                        filter=Q(
-                            payments__kind=Payment.Kind.GROUP_BUYOUT,
-                            payments__status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
-                        ),
-                    ),
-                    0,
-                ),
+                annotated_bought_seats=Coalesce(Subquery(bought_subquery, output_field=IntegerField()), 0),
                 # Per-user, so the buyout quote does not charge the own seat
                 # twice. An Exists annotation keeps the endpoint at a fixed
                 # query count.

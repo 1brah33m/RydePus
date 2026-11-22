@@ -611,6 +611,50 @@ def test_joining_with_a_seat_count_reserves_that_many_seats(student_user):
 
 
 @pytest.mark.django_db
+def test_group_list_counts_multi_member_buyout_once(student_client, student_user):
+    """Regression test: the list endpoint must not multiply bought seats by member rows.
+
+    A plain Sum() over the joined members+payments tables counts one bought
+    seat once per member (2 members + 1 bought seat read as 4/4 full). The
+    list response must match the model truth: 3/4 with 1 remaining.
+    """
+    created = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "List Math",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 2,
+        },
+        format="json",
+    )
+    assert created.status_code == status.HTTP_201_CREATED
+    group_id = created.json()["id"]
+
+    joiner = User.objects.create_user(
+        email="listmath@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+    joined = client.post(f"{GROUPS_URL}{group_id}/join/", {"seats": 1}, format="json")
+    assert joined.status_code == status.HTTP_200_OK
+    assert joined.json()["seats_filled"] == 3
+
+    listed = student_client.get(GROUPS_URL, format="json")
+    assert listed.status_code == status.HTTP_200_OK
+    body = next(g for g in listed.json() if g["id"] == group_id)
+    group = Group.objects.get(pk=group_id)
+    assert body["member_count"] == group.member_count == 2
+    assert body["bought_seats"] == group.bought_seats == 1
+    assert body["seats_filled"] == group.seats_filled == 3
+    assert body["remaining_seats"] == group.remaining_seats == 1
+    assert body["status"] == Group.Status.WAITING
+
+
+@pytest.mark.django_db
 def test_join_defaults_to_a_single_seat(student_user):
     group = Group.objects.create(
         name="Solo Join",
