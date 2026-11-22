@@ -158,15 +158,28 @@ export function DriverRideProvider({ children }: { children: ReactNode }) {
 
   const accept = useCallback(
     async (tripId: string) => {
+      // Optimistic: move the request into the assigned ride instantly so the
+      // tap feels immediate even on a slow network. The refresh below then
+      // confirms against server truth (or rolls back on failure).
+      const queued = requests.find((t) => t.id === tripId)
+      if (queued) {
+        setRequests((prev) => prev.filter((t) => t.id !== tripId))
+        setAssigned((prev) =>
+          prev.some((t) => t.id === tripId) ? prev : [...prev, { ...queued, status: 'DRIVER_ACCEPTED' as const }],
+        )
+      }
       setBusy(true)
       try {
         await tripService.acceptTrip(tripId)
         await refresh()
+      } catch (err) {
+        await refresh().catch(() => undefined)
+        throw new Error(err instanceof Error ? err.message : 'Could not accept this ride. Please try again.')
       } finally {
         setBusy(false)
       }
     },
-    [refresh],
+    [refresh, requests],
   )
 
   const start = useCallback(

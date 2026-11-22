@@ -11,11 +11,17 @@ import { Button } from '../../components/ui/Button'
 export function DriverRequests() {
   const { online, requests, activeTrip, busy, setOnline, accept, start, complete } = useDriverRide()
   const [acceptedNotice, setAcceptedNotice] = useState<{ pickup: string; destination: string } | null>(null)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
 
   const handleAccept = async (trip: Trip) => {
-    await accept(trip.id)
-    setAcceptedNotice({ pickup: trip.pickup.name, destination: trip.destination.name })
-    setTimeout(() => setAcceptedNotice(null), 6000)
+    setAcceptError(null)
+    try {
+      await accept(trip.id)
+      setAcceptedNotice({ pickup: trip.pickup.name, destination: trip.destination.name })
+      setTimeout(() => setAcceptedNotice(null), 6000)
+    } catch (err) {
+      setAcceptError(err instanceof Error ? err.message : 'Could not accept this ride. Please try again.')
+    }
   }
 
   const awaitingStart = activeTrip?.status === 'DRIVER_ACCEPTED'
@@ -84,6 +90,16 @@ export function DriverRequests() {
         )}
 
         {/* Accepted confirmation */}
+        {acceptError && (
+          <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive">
+            <div className="flex items-start justify-between gap-3">
+              <span>{acceptError}</span>
+              <button type="button" onClick={() => setAcceptError(null)} className="shrink-0 font-semibold underline">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
         {acceptedNotice && (
           <p
             role="status"

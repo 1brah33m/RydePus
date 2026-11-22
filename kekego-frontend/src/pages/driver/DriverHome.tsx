@@ -6,6 +6,7 @@ import type { Trip } from '../../types'
 import { DriverShell } from '../../components/navigation/DriverShell'
 import { OnlineToggle } from '../../components/driver/OnlineToggle'
 import { PassengerFareList } from '../../components/driver/PassengerFareList'
+import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
 import { useDriverRide } from '../../hooks/useDriverRide'
 
@@ -26,6 +27,8 @@ export function DriverHome() {
   } = useDriverRide()
 
   const [toggling, setToggling] = useState(false)
+  const [acceptingId, setAcceptingId] = useState<string | null>(null)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
 
   const handleToggle = async () => {
     setToggling(true)
@@ -33,6 +36,18 @@ export function DriverHome() {
       await setOnline(!online)
     } finally {
       setToggling(false)
+    }
+  }
+
+  const handleAccept = async (tripId: string) => {
+    setAcceptingId(tripId)
+    setAcceptError(null)
+    try {
+      await accept(tripId)
+    } catch (err) {
+      setAcceptError(err instanceof Error ? err.message : 'Could not accept this ride. Please try again.')
+    } finally {
+      setAcceptingId(null)
     }
   }
 
@@ -98,7 +113,10 @@ export function DriverHome() {
               ) : nextRequest ? (
                 <RequestBox
                   trip={nextRequest}
-                  onAccept={() => void accept(nextRequest.id)}
+                  accepting={acceptingId === nextRequest.id}
+                  acceptError={acceptError}
+                  onDismissAcceptError={() => setAcceptError(null)}
+                  onAccept={() => void handleAccept(nextRequest.id)}
                   onViewRequests={openQueue}
                 />
               ) : (
@@ -154,10 +172,16 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub: st
 
 function RequestBox({
   trip,
+  accepting,
+  acceptError,
+  onDismissAcceptError,
   onAccept,
   onViewRequests,
 }: {
   trip: Trip
+  accepting: boolean
+  acceptError: string | null
+  onDismissAcceptError: () => void
   onAccept: () => void
   onViewRequests: () => void
 }) {
@@ -201,13 +225,25 @@ function RequestBox({
         </p>
       </div>
 
+      {acceptError && (
+        <Alert tone="error">
+          <div className="flex items-start justify-between gap-3">
+            <span>{acceptError}</span>
+            <button type="button" onClick={onDismissAcceptError} className="shrink-0 font-semibold underline">
+              Dismiss
+            </button>
+          </div>
+        </Alert>
+      )}
+
       <div className="mt-3 flex gap-2.5">
         <button
           type="button"
           onClick={onAccept}
-          className="inline-flex min-h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-base font-bold text-primary-foreground transition-transform active:scale-[0.98]"
+          disabled={accepting}
+          className="inline-flex min-h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-base font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
         >
-          <span className="truncate">Accept Ride</span>
+          <span className="truncate">{accepting ? 'Accepting…' : 'Accept Ride'}</span>
           <ArrowRight01Icon aria-hidden className="size-5 shrink-0" />
         </button>
         <button
