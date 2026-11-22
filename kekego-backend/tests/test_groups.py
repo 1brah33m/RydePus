@@ -95,6 +95,116 @@ def test_member_can_leave_group(student_user):
 
 
 @pytest.mark.django_db
+def test_leave_frees_the_leavers_bought_seats(student_client, student_user):
+    """A member's buyout commitments leave with them — no ghost seats."""
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Two Seat Creator",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 2,
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    group_id = response.json()["id"]
+    assert response.json()["bought_seats"] == 1
+    assert response.json()["seats_filled"] == 2
+
+    joiner = User.objects.create_user(
+        email="joinerleaves@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    join_client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    join_client.force_authenticate(joiner)
+    joined = join_client.post(f"{GROUPS_URL}{group_id}/join/", format="json")
+    assert joined.status_code == status.HTTP_200_OK
+    assert joined.json()["seats_filled"] == 3
+
+    # The creator (who covered 2 seats) leaves: membership and buyout go.
+    left = student_client.post(f"{GROUPS_URL}{group_id}/leave/", format="json")
+    assert left.status_code == status.HTTP_200_OK
+    body = left.json()
+    assert body["member_count"] == 1
+    assert body["bought_seats"] == 0
+    assert body["seats_filled"] == 1
+    assert body["remaining_seats"] == 3
+    assert body["status"] == Group.Status.WAITING
+    assert not Payment.objects.filter(group_id=group_id, payer=student_user).exists()
+
+
+@pytest.mark.django_db
+def test_leaver_without_buyout_keeps_others_buyouts(student_client, student_user):
+    """Only the leaver's own buyouts are freed; other members keep theirs."""
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Shared Cover",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 2,
+        },
+        format="json",
+    )
+    group_id = response.json()["id"]
+
+    joiner = User.objects.create_user(
+        email="buyerleaves@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    join_client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    join_client.force_authenticate(joiner)
+    assert join_client.post(f"{GROUPS_URL}{group_id}/join/", format="json").status_code == status.HTTP_200_OK
+
+    # Joiner covers the last open seat: 2 members + 2 bought = 4/4 FULL.
+    bought = join_client.post(
+        f"{GROUPS_URL}{group_id}/buyout/", {"seats": 1, "currency": "NGN"}, format="json"
+    )
+    assert bought.status_code == status.HTTP_201_CREATED
+    group = Group.objects.get(pk=group_id)
+    assert group.seats_filled == 4
+
+    # Joiner leaves: their 1 bought seat goes, the creator's 1 stays.
+    left = join_client.post(f"{GROUPS_URL}{group_id}/leave/", format="json")
+    assert left.status_code == status.HTTP_200_OK
+    body = left.json()
+    assert body["member_count"] == 1
+    assert body["bought_seats"] == 1
+    assert body["seats_filled"] == 2
+    assert body["remaining_seats"] == 2
+    assert not Payment.objects.filter(group_id=group_id, payer=joiner).exists()
+    assert Payment.objects.filter(group_id=group_id, payer=student_user).exists()
+
+
+@pytest.mark.django_db
+def test_sole_buyer_leaving_removes_group(student_client, student_user):
+    """Creator covering all 4 seats alone: leaving deletes the group."""
+    response = student_client.post(
+        GROUPS_URL,
+        {
+            "name": "Solo Full",
+            "pickup_location": "Gate",
+            "destination": "Hostel",
+            "capacity": 4,
+            "seats": 4,
+        },
+        format="json",
+    )
+    group_id = response.json()["id"]
+    assert response.json()["seats_filled"] == 4
+
+    left = student_client.post(f"{GROUPS_URL}{group_id}/leave/", format="json")
+    assert left.status_code == status.HTTP_204_NO_CONTENT
+    assert not Group.objects.filter(pk=group_id).exists()
+    assert not Payment.objects.filter(group_id=group_id).exists()
+
+
+@pytest.mark.django_db
 def test_last_member_leaving_removes_group(student_client, student_user):
     group = Group.objects.create(
         name="Empty Ride",

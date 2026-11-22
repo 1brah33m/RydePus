@@ -43,3 +43,14 @@ export function isTripAccepted(status: Trip['status']): boolean {
 export function isGroupAccepted(status: Group['status']): boolean {
   return ACCEPTED_GROUP_STATUSES.has(status)
 }
+
+/**
+ * True when a leave failure means a driver is already committed (leaving is
+ * locked), as opposed to any other error (not a member, network, ...). Only
+ * lock-type failures should show the "can't leave" modal; anything else must
+ * surface the real message so "leave did nothing" never misleads.
+ */
+export function isLeaveLockedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  return /committed trip|already assigned|driver/i.test(msg)
+}

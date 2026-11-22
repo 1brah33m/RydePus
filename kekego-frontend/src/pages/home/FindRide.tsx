@@ -18,7 +18,7 @@ export function FindRide() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { groupsByRoute, createGroup, activeGroup, leaveGroup } = useApp()
-  const { joiningId, blockedGroupId, leaving, leaveBlocked, joinError, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissJoinError } =
+  const { joiningId, blockedGroupId, leaving, leaveBlocked, leaveError, joinError, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissLeaveError, dismissJoinError } =
     useGroupJoin()
 
   const pickupId = params.get('pickup') ?? ''
@@ -104,6 +104,17 @@ export function FindRide() {
             </Alert>
           )}
 
+          {leaveError && (
+            <Alert tone="error" className="mt-3">
+              <div className="flex items-start justify-between gap-3">
+                <span>{leaveError}</span>
+                <button type="button" onClick={dismissLeaveError} className="shrink-0 font-semibold underline">
+                  Dismiss
+                </button>
+              </div>
+            </Alert>
+          )}
+
           {createError && (
             <Alert tone="error" className="mt-3">
               <div className="flex items-start justify-between gap-3">
@@ -173,6 +184,7 @@ export function FindRide() {
         onClose={() => {
           dismissBlock()
           dismissLeaveBlock()
+          dismissLeaveError()
         }}
         onViewGroup={viewActiveGroup}
         onLeaveGroup={leaveAndJoin}

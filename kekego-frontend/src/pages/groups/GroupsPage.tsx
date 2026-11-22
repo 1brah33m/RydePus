@@ -30,7 +30,7 @@ function isOpenGroup(status: string, occupied: number, maxSize: number): boolean
 
 export function GroupsPage() {
   const { activeGroup, allPendingGroups } = useApp()
-  const { joiningId, blockedGroupId, leaving, leaveBlocked, joinError, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissJoinError } =
+  const { joiningId, blockedGroupId, leaving, leaveBlocked, leaveError, joinError, join, dismissBlock, viewActiveGroup, leaveAndJoin, dismissLeaveBlock, dismissLeaveError, dismissJoinError } =
     useGroupJoin()
 
   const [filter, setFilter] = useState<Filter>('all')
@@ -144,6 +144,16 @@ export function GroupsPage() {
             </div>
           </Alert>
         )}
+        {leaveError && (
+          <Alert tone="error" className="mb-4">
+            <div className="flex items-start justify-between gap-3">
+              <span>{leaveError}</span>
+              <button type="button" onClick={dismissLeaveError} className="shrink-0 font-semibold underline">
+                Dismiss
+              </button>
+            </div>
+          </Alert>
+        )}
         {visibleGroups.length > 0 ? (
           <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
             {visibleGroups.map((group) => (
@@ -183,6 +193,7 @@ export function GroupsPage() {
         onClose={() => {
           dismissBlock()
           dismissLeaveBlock()
+          dismissLeaveError()
         }}
         onViewGroup={viewActiveGroup}
         onLeaveGroup={leaveAndJoin}
@@ -202,7 +213,10 @@ function GroupCard({
 }) {
   const occupied = group.seatsFilled
   const mins = minutesToDeparture(group)
-  const joinable = isOpenGroup(group.status, occupied, group.maxSize)
+  // A member looking at their own group must see a way back in, not a Join
+  // button that the server would reject with "already joined".
+  const isMember = group.members.some((m) => m.isCurrentUser)
+  const joinable = !isMember && isOpenGroup(group.status, occupied, group.maxSize)
   const leavingSoon = mins < 1
 
   return (
@@ -274,6 +288,10 @@ function GroupCard({
           >
             {joining ? 'Joining…' : 'Join group'}
           </button>
+        ) : isMember ? (
+          <Button size="sm" to={`/groups/${group.id}`} className="shrink-0 px-5">
+            Open
+          </Button>
         ) : (
           <span className="shrink-0 rounded-xl bg-muted px-5 py-2.5 text-sm font-semibold text-muted-foreground">
             Full

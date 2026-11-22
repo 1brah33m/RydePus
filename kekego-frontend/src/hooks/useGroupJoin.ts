@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { isLeaveLockedError } from '../utils/rideStatus'
 
 /**
  * Join-flow guard.
@@ -19,6 +20,7 @@ export function useGroupJoin() {
   const [blockedGroupId, setBlockedGroupId] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [leaveBlocked, setLeaveBlocked] = useState(false)
+  const [leaveError, setLeaveError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
 
   const join = async (groupId: string) => {
@@ -48,6 +50,7 @@ export function useGroupJoin() {
     if (!activeGroup || !blockedGroupId) return
     setLeaving(true)
     setLeaveBlocked(false)
+    setLeaveError(null)
     setJoinError(null)
     try {
       const targetId = blockedGroupId
@@ -55,13 +58,21 @@ export function useGroupJoin() {
       setBlockedGroupId(null)
       const joined = await joinGroup(targetId)
       navigate(`/groups/${joined.id}`)
-    } catch {
+    } catch (error) {
       setLeaving(false)
-      setLeaveBlocked(true)
+      // Only a committed driver locks leaving; any other failure must show
+      // its real message instead of the lock warning.
+      if (isLeaveLockedError(error)) {
+        setLeaveBlocked(true)
+      } else {
+        setLeaveError(error instanceof Error ? error.message : 'Could not leave your current group.')
+      }
     }
   }
 
   const dismissLeaveBlock = () => setLeaveBlocked(false)
+
+  const dismissLeaveError = () => setLeaveError(null)
 
   const dismissJoinError = () => setJoinError(null)
 
@@ -70,6 +81,7 @@ export function useGroupJoin() {
     blockedGroupId,
     leaving,
     leaveBlocked,
+    leaveError,
     joinError,
     activeGroup,
     join,
@@ -77,6 +89,7 @@ export function useGroupJoin() {
     viewActiveGroup,
     leaveAndJoin,
     dismissLeaveBlock,
+    dismissLeaveError,
     dismissJoinError,
   }
 }

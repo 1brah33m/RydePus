@@ -15,7 +15,10 @@ interface GroupCardProps {
 export function GroupCard({ group, onJoin, joining = false }: GroupCardProps) {
   const occupied = group.seatsFilled
   const waiting = group.maxSize - occupied
-  const joinable = group.status === 'WAITING' && waiting > 0
+  // Members must see a way back into their own group, not a Join button the
+  // server would reject with "already joined".
+  const isMember = group.members.some((m) => m.isCurrentUser)
+  const joinable = !isMember && group.status === 'WAITING' && waiting > 0
 
   return (
     <Card className="p-4">
@@ -45,7 +48,7 @@ export function GroupCard({ group, onJoin, joining = false }: GroupCardProps) {
             : 'Group sent to driver queue'}
       </p>
 
-      {joinable && (
+      {joinable ? (
         <Button
           size="sm"
           fullWidth
@@ -56,6 +59,12 @@ export function GroupCard({ group, onJoin, joining = false }: GroupCardProps) {
         >
           {joining ? 'JOINING…' : 'JOIN GROUP'}
         </Button>
+      ) : (
+        isMember && (
+          <Button size="sm" fullWidth variant="outline" className="mt-3.5" to={`/groups/${group.id}`}>
+            VIEW GROUP — YOU&apos;RE IN
+          </Button>
+        )
       )}
     </Card>
   )

@@ -132,6 +132,8 @@ export interface GroupMember {
   seats: number
   /** True when the member is the signed-in student. */
   isCurrentUser?: boolean
+  /** True when this member created the group. */
+  isCreator?: boolean
 }
 
 /**
@@ -179,6 +181,10 @@ export interface Group {
   ownSeatPaid: boolean
   /** True when the group may be dispatched to drivers (4/4, or bought out). */
   isDispatchable: boolean
+  /** Backend user id of the group creator (as string). */
+  createdBy?: string
+  /** True when the signed-in student created this group (and may cancel it). */
+  isCreator?: boolean
 }
 
 /** A ride shared by a group with an assigned driver. */

@@ -39,12 +39,14 @@ export function Home() {
     blockedGroupId,
     leaving,
     leaveBlocked,
+    leaveError,
     joinError,
     join,
     dismissBlock,
     viewActiveGroup,
     leaveAndJoin,
     dismissLeaveBlock,
+    dismissLeaveError,
     dismissJoinError,
   } = useGroupJoin()
   const navigate = useNavigate()
@@ -333,6 +335,16 @@ export function Home() {
             </div>
           </Alert>
         )}
+        {leaveError && (
+          <Alert tone="error" className="mt-4">
+            <div className="flex items-start justify-between gap-3">
+              <span>{leaveError}</span>
+              <button type="button" onClick={dismissLeaveError} className="shrink-0 font-semibold underline">
+                Dismiss
+              </button>
+            </div>
+          </Alert>
+        )}
       </section>
       <MembershipBlockModal
         open={blockedGroupId !== null}
@@ -342,6 +354,7 @@ export function Home() {
         onClose={() => {
           dismissBlock()
           dismissLeaveBlock()
+          dismissLeaveError()
         }}
         onViewGroup={viewActiveGroup}
         onLeaveGroup={leaveAndJoin}

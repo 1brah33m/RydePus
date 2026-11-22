@@ -69,6 +69,7 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
     name: m.name,
     seats: 1,
     isCurrentUser: currentMemberId !== undefined && String(m.id) === currentMemberId,
+    isCreator: m.is_creator,
   }))
 
   const status: GroupStatus = api.status === 'FULL' ? 'FULL' : 'WAITING'
@@ -102,6 +103,8 @@ export function mapGroup(api: ApiGroup, currentMemberId?: string): Group {
     fareTotal,
     ownSeatPaid: api.own_seat_paid ?? false,
     isDispatchable: members.length + boughtSeats >= api.capacity,
+    createdBy: String(api.created_by),
+    isCreator: currentMemberId !== undefined && String(api.created_by) === currentMemberId,
   }
 }
 

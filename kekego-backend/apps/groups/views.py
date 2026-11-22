@@ -374,6 +374,16 @@ class GroupLeaveView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Seats this member was covering leave with them. Without this,
+            # a leaver's GROUP_BUYOUT rows would keep counting as filled
+            # seats forever: ghost seats nobody owns and nobody can free,
+            # since only members can buy out or leave.
+            group.payments.filter(
+                payer=request.user,
+                kind=Payment.Kind.GROUP_BUYOUT,
+                status__in=[Payment.Status.PENDING, Payment.Status.SUCCESSFUL],
+            ).delete()
+
             membership.delete()
             if not group.members.exists():
                 group.delete()
@@ -397,9 +407,20 @@ class GroupCancelView(APIView):
     def post(self, request, group_id):
         with transaction.atomic():
             try:
-                group = Group.objects.select_for_update().get(pk=group_id, created_by=request.user)
+                group = Group.objects.select_for_update().get(pk=group_id)
             except Group.DoesNotExist:
                 return Response({"error": {"code": "NOT_FOUND", "message": "Group not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+            if group.created_by_id != request.user.id:
+                return Response(
+                    {
+                        "error": {
+                            "code": "PERMISSION_DENIED",
+                            "message": "Only the group creator can cancel this request. If you joined this group, use Leave Group instead.",
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
             if group.trip_set.filter(status__in=[Trip.Status.ACCEPTED, Trip.Status.IN_PROGRESS, Trip.Status.COMPLETED]).exists():
                 return Response(

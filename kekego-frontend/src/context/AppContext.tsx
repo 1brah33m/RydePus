@@ -95,7 +95,10 @@ function deriveSelection(
 
   let activeGroupId = prev.activeGroupId
   const group = groups.find((g) => g.id === activeGroupId)
-  if (!group || !OPEN_GROUP_STATUSES.has(group.status)) {
+  // Only keep the previous selection if the student is still a member of an
+  // open group. Otherwise leaving (or being removed) would keep showing the
+  // old group as "yours" even though the student is no longer in it.
+  if (!group || !OPEN_GROUP_STATUSES.has(group.status) || !isMember(group)) {
     activeGroupId = groups.find((g) => OPEN_GROUP_STATUSES.has(g.status) && isMember(g))?.id ?? null
   }
 

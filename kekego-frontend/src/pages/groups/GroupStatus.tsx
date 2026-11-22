@@ -15,7 +15,7 @@ import {
   AlertCircleIcon,
 } from 'hugeicons-react'
 import { useApp } from '../../context/AppContext'
-import { isGroupCancellationLocked } from '../../utils/rideStatus'
+import { isGroupCancellationLocked, isLeaveLockedError } from '../../utils/rideStatus'
 import { formatCurrency } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
@@ -38,6 +38,7 @@ export function GroupStatus() {
   const [blockLeaving, setBlockLeaving] = useState(false)
   const [blockWarning, setBlockWarning] = useState<string | null>(null)
   const [leaveBlocked, setLeaveBlocked] = useState(false)
+  const [leaveError, setLeaveError] = useState<string | null>(null)
   const [dismissedNoticeFor, setDismissedNoticeFor] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const [buyOutOpen, setBuyOutOpen] = useState(false)
@@ -90,6 +91,8 @@ export function GroupStatus() {
 
   const isMember = group?.members.some((m) => m.isCurrentUser) ?? false
   const isActive = activeGroup?.id === group?.id || isMember
+  const isCreator =
+    group?.isCreator ?? group?.members.some((m) => m.isCurrentUser && m.isCreator) ?? false
   const occupied = group.seatsFilled
   const waiting = group.remainingSeats
   const full = occupied >= group.maxSize || waiting <= 0
@@ -135,12 +138,19 @@ export function GroupStatus() {
   const handleLeave = async () => {
     setLeaving(true)
     setLeaveBlocked(false)
+    setLeaveError(null)
     try {
       await leaveGroup(group.id)
       navigate('/groups', { replace: true })
-    } catch {
+    } catch (err) {
       setLeaving(false)
-      setLeaveBlocked(true)
+      // Only a committed driver locks leaving; any other failure (not a
+      // member, network, ...) must show its real message, not the lock modal.
+      if (isLeaveLockedError(err)) {
+        setLeaveBlocked(true)
+      } else {
+        setLeaveError(err instanceof Error ? err.message : 'Could not leave this group. Please try again.')
+      }
     }
   }
 
@@ -185,9 +195,14 @@ export function GroupStatus() {
       } finally {
         setJoining(false)
       }
-    } catch {
+    } catch (err) {
       setBlockLeaving(false)
-      setBlockWarning('A driver is already assigned to this trip. You cannot leave the group now.')
+      if (isLeaveLockedError(err)) {
+        setBlockWarning('A driver is already assigned to this trip. You cannot leave the group now.')
+      } else {
+        setBlockedOpen(false)
+        setJoinError(err instanceof Error ? err.message : 'Could not leave your current group. Please try again.')
+      }
     }
   }
 
@@ -391,6 +406,8 @@ export function GroupStatus() {
           groupOccupied={occupied}
           groupMax={group.maxSize}
           leaving={leaving}
+          leaveError={leaveError}
+          onDismissLeaveError={() => setLeaveError(null)}
           onLeave={handleLeave}
         />
       ) : matched ? (
@@ -488,33 +505,67 @@ export function GroupStatus() {
           )}
 
           <div className="mt-3 flex min-w-0 flex-col gap-2.5">
-            <div className="grid min-w-0 grid-cols-2 gap-2.5">
-              <Button
-                size="md"
-                fullWidth
-                variant="outline"
-                loading={leaving}
-                onClick={handleLeave}
-                className="min-w-0 px-3"
-              >
-                <Logout01Icon aria-hidden className="size-4 shrink-0" />
-                <span className="min-w-0 truncate">Leave Group</span>
-              </Button>
-              <Button
-                size="md"
-                fullWidth
-                variant="danger"
-                loading={busy}
-                onClick={handleCancel}
-                className="min-w-0 px-3"
-              >
-                <Cancel01Icon aria-hidden className="size-4 shrink-0" />
-                <span className="min-w-0 truncate">Cancel Request</span>
-              </Button>
-            </div>
+            {isCreator ? (
+              <div className="grid min-w-0 grid-cols-2 gap-2.5">
+                <Button
+                  size="md"
+                  fullWidth
+                  variant="outline"
+                  loading={leaving}
+                  onClick={handleLeave}
+                  className="min-w-0 px-3"
+                >
+                  <Logout01Icon aria-hidden className="size-4 shrink-0" />
+                  <span className="min-w-0 truncate">Leave Group</span>
+                </Button>
+                <Button
+                  size="md"
+                  fullWidth
+                  variant="danger"
+                  loading={busy}
+                  onClick={handleCancel}
+                  className="min-w-0 px-3"
+                >
+                  <Cancel01Icon aria-hidden className="size-4 shrink-0" />
+                  <span className="min-w-0 truncate">Cancel Request</span>
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  size="md"
+                  fullWidth
+                  variant="outline"
+                  loading={leaving}
+                  onClick={handleLeave}
+                  className="min-w-0 px-3"
+                >
+                  <Logout01Icon aria-hidden className="size-4 shrink-0" />
+                  <span className="min-w-0 truncate">Leave Group</span>
+                </Button>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Only the student who created this pool can cancel it for everyone. Leaving
+                  frees your seat so you can join or create another group.
+                </p>
+              </>
+            )}
             {cancelError && (
               <Alert tone="error" className="mt-1 break-words">
                 {cancelError}
+              </Alert>
+            )}
+            {leaveError && (
+              <Alert tone="error" className="mt-1 break-words">
+                <div className="flex items-start justify-between gap-3">
+                  <span>{leaveError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setLeaveError(null)}
+                    className="shrink-0 font-semibold underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </Alert>
             )}
           </div>
@@ -672,12 +723,16 @@ function SearchingForDriver({
   groupOccupied,
   groupMax,
   leaving,
+  leaveError,
   onLeave,
+  onDismissLeaveError,
 }: {
   groupOccupied: number
   groupMax: number
   leaving: boolean
+  leaveError?: string | null
   onLeave: () => void
+  onDismissLeaveError?: () => void
 }) {
   return (
     <div className="overflow-hidden rounded-3xl border border-border bg-card">
@@ -724,6 +779,16 @@ function SearchingForDriver({
           <Logout01Icon aria-hidden className="size-4" />
           {leaving ? 'Leaving…' : 'Leave group'}
         </button>
+        {leaveError && (
+          <div role="alert" className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive">
+            <span>{leaveError}</span>
+            {onDismissLeaveError && (
+              <button type="button" onClick={onDismissLeaveError} className="shrink-0 font-semibold underline">
+                Dismiss
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
