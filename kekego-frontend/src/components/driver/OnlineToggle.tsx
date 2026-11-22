@@ -12,25 +12,34 @@ export function OnlineToggle({ online, onToggle }: OnlineToggleProps) {
       role="switch"
       aria-checked={online}
       onClick={onToggle}
-      className={cn(
-        'inline-flex shrink-0 items-center gap-2 rounded-full py-2 pl-3 pr-2 text-xs font-semibold transition-colors',
-        online
-          ? 'bg-primary text-primary-foreground'
-          : 'bg-muted text-muted-foreground',
-      )}
+      className="flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-card py-2.5 pr-2.5 pl-4 transition-colors hover:border-ring"
     >
-      {online ? 'Online' : 'Go Online'}
+      <span className="text-left">
+        <span className="flex items-center gap-1.5 text-sm font-bold whitespace-nowrap text-foreground">
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 rounded-full',
+              online ? 'animate-pulse bg-blue-500' : 'bg-muted-foreground/50',
+            )}
+          />
+          {online ? 'Online' : 'Offline'}
+        </span>
+        <span className="mt-0.5 block text-xs whitespace-nowrap text-muted-foreground">
+          {online ? 'Accepting rides' : 'Paused'}
+        </span>
+      </span>
       <span
         aria-hidden
         className={cn(
-          'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-          online ? 'bg-primary-foreground/30' : 'bg-foreground/15',
+          'relative inline-flex h-7 w-12 items-center rounded-full transition-colors',
+          online ? 'bg-blue-500' : 'bg-foreground/15',
         )}
       >
         <span
           className={cn(
-            'inline-block size-4 rounded-full shadow transition-transform',
-            online ? 'translate-x-[18px] bg-primary-foreground' : 'translate-x-0.5 bg-background',
+            'inline-block size-5 rounded-full bg-white shadow transition-transform',
+            online ? 'translate-x-6' : 'translate-x-1',
           )}
         />
       </span>
