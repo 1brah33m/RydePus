@@ -719,6 +719,71 @@ def test_joining_with_one_seat_left_succeeds(student_user):
 
 
 @pytest.mark.django_db
+def test_buyout_retry_with_same_idempotency_key_is_deduplicated(student_user):
+    """A double-tapped buyout (same key) records the seats once, not twice."""
+    group = Group.objects.create(
+        name="Idempotent Buyout",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    joiner = User.objects.create_user(
+        email="idempotent@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+    assert client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 1}, format="json").status_code == status.HTTP_200_OK
+
+    payload = {"seats": 1, "currency": "NGN", "idempotency_key": "tap-abc-123"}
+    first = client.post(f"{GROUPS_URL}{group.id}/buyout/", payload, format="json")
+    assert first.status_code == status.HTTP_201_CREATED
+
+    second = client.post(f"{GROUPS_URL}{group.id}/buyout/", payload, format="json")
+    assert second.status_code == status.HTTP_200_OK
+    assert second.json()["id"] == first.json()["id"]
+    assert Payment.objects.filter(group=group, payer=joiner, kind=Payment.Kind.GROUP_BUYOUT).count() == 1
+    group.refresh_from_db()
+    assert group.seats_filled == 3
+    assert group.status == Group.Status.WAITING
+
+
+@pytest.mark.django_db
+def test_buyout_with_different_keys_records_separate_commitments(student_user):
+    """Distinct top-ups (different keys) each record their own seats."""
+    group = Group.objects.create(
+        name="Two Topups",
+        pickup_location="Gate",
+        destination="Hostel",
+        capacity=4,
+        created_by=student_user,
+    )
+    joiner = User.objects.create_user(
+        email="topups@example.com",
+        password="StrongPass123!",
+        role=User.Role.STUDENT,
+    )
+    client = __import__("rest_framework.test", fromlist=["APIClient"]).APIClient()
+    client.force_authenticate(joiner)
+    assert client.post(f"{GROUPS_URL}{group.id}/join/", {"seats": 1}, format="json").status_code == status.HTTP_200_OK
+
+    for key in ("tap-one", "tap-two"):
+        response = client.post(
+            f"{GROUPS_URL}{group.id}/buyout/",
+            {"seats": 1, "currency": "NGN", "idempotency_key": key},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    assert Payment.objects.filter(group=group, payer=joiner, kind=Payment.Kind.GROUP_BUYOUT).count() == 2
+    group.refresh_from_db()
+    assert group.seats_filled == 4
+    assert group.status == Group.Status.FULL
+
+
+@pytest.mark.django_db
 def test_joiner_picking_one_seat_gets_exactly_one_seat(student_client, student_user):
     """Reported scenario: creator covers 2 seats, joiner picks 1 in the prompt.
 

@@ -48,6 +48,8 @@ export function GroupStatus() {
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState<string | null>(null)
   const [buyOutSeats, setBuyOutSeats] = useState(0)
+  /** One tap = one key: retrying the same tap returns the original payment. */
+  const [buyKey, setBuyKey] = useState<string | null>(null)
 
   // Brief toast for the "pool is full" notice: shows on arrival, hides itself.
   const noticeId = group?.id
@@ -120,15 +122,24 @@ export function GroupStatus() {
     }
   }
 
+  const newBuyKey = () => {
+    try {
+      return crypto.randomUUID()
+    } catch {
+      return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
+  }
+
   /**
    * Cover the selected empty seats. Buying all of them makes the group
    * dispatchable; buying fewer leaves those seats open for other passengers.
    */
   const handleBuyOut = async () => {
+    if (buying) return
     setBuying(true)
     setBuyError(null)
     try {
-      await buyOutGroup(group.id, buyOutSeats || undefined)
+      await buyOutGroup(group.id, buyOutSeats || undefined, buyKey ?? undefined)
       setBuyOutOpen(false)
     } catch (err) {
       setBuyError(err instanceof Error ? err.message : 'We could not take that payment. Please try again.')
@@ -476,25 +487,29 @@ export function GroupStatus() {
             />
           </div>
 
+          {/* One row per seat: a member paying for N seats is listed across N
+              passenger rows, so extra seats are always visibly assigned. */}
           <ul className="mt-2 divide-y divide-border">
-            {group.members.map((member) => (
-              <li key={member.id} className="flex min-w-0 items-center gap-2.5 py-2.5">
-                <CheckmarkCircle02Icon aria-hidden className="size-5 shrink-0 text-primary" />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                  {member.name}
-                </span>
-                {(member.seats ?? 1) > 1 && (
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-foreground">
-                    {member.seats} seats
+            {group.members.flatMap((member) =>
+              Array.from({ length: Math.max(1, member.seats ?? 1) }, (_, i) => (
+                <li key={`${member.id}-seat-${i}`} className="flex min-w-0 items-center gap-2.5 py-2.5">
+                  <CheckmarkCircle02Icon aria-hidden className="size-5 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {member.name}
                   </span>
-                )}
-                {member.isCurrentUser && (
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-foreground">
-                    You
-                  </span>
-                )}
-              </li>
-            ))}
+                  {i > 0 && (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-foreground">
+                      Paid seat
+                    </span>
+                  )}
+                  {i === 0 && member.isCurrentUser && (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-foreground">
+                      You
+                    </span>
+                  )}
+                </li>
+              )),
+            )}
             {Array.from({ length: Math.max(0, group.maxSize - occupied) }, (_, i) => (
               <li key={`empty-${i}`} className="flex min-w-0 items-center gap-2.5 py-2.5">
                 <CircleIcon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
@@ -535,6 +550,9 @@ export function GroupStatus() {
                 setBuyError(null)
                 // Default to filling everything, the usual reason to open this.
                 setBuyOutSeats(0)
+                // A fresh key per opening: one tap, one commitment, even if
+                // the confirm button is somehow submitted twice.
+                setBuyKey(newBuyKey())
                 setBuyOutOpen(true)
               }}
             >

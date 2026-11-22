@@ -148,7 +148,7 @@ interface AppContextValue {
    * Resolves with the total charged.
    */
   /** Buy seats for a group; defaults to all empty seats. Returns the amount charged. */
-  buyOutGroup: (groupId: string, seats?: number) => Promise<number>
+  buyOutGroup: (groupId: string, seats?: number, idempotencyKey?: string) => Promise<number>
   cancelTrip: (tripId: string) => Promise<Trip>
   submitRating: (tripId: string, rating: number, comment?: string) => Promise<void>
   /**
@@ -334,13 +334,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /**
    * Pay for a group's empty seats. Defaults to filling every remaining seat so
    * the group can leave immediately; `seats` lets a student pay for only the
-   * ones they intend to ride in.
+   * ones they intend to ride in. `idempotencyKey` identifies one user tap so a
+   * retried tap never records the seats twice.
    *
    * The backend prices the seats, so the returned amount comes from the server
    * and not from a local calculation.
    */
   const buyOutGroup = useCallback(
-    async (groupId: string, seats?: number): Promise<number> => {
+    async (groupId: string, seats?: number, idempotencyKey?: string): Promise<number> => {
       requireStudent()
       const group = state.groups.find((g) => g.id === groupId)
       if (!group) throw new Error('We could not find this group.')
@@ -365,7 +366,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         group.farePerSeat > 0 ? group.farePerSeat : perSeatFare(group.pickup.id, group.destination.id)
       const chargedSeats = wanted + (group.ownSeatPaid ? 0 : 1)
       const amount = perSeat * chargedSeats
-      await groupService.buyOutSeats(group.id, wanted, amount)
+      await groupService.buyOutSeats(group.id, wanted, amount, idempotencyKey)
 
       const updated = await groupService.getGroups(currentMemberId)
       const fresh = updated.find((g) => g.id === groupId)

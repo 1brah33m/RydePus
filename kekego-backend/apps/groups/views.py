@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -492,6 +492,11 @@ class GroupBuyoutView(APIView):
 
     One payment covers the whole share: the student's own seat (charged once)
     plus the empty seats they are filling.
+
+    Retries are idempotent: pass the same ``idempotency_key`` the client
+    generated for the tap and a duplicate delivery returns the original
+    payment (200) instead of recording the seats twice. Without a key each
+    POST is a new commitment, so rapid double-taps must carry the same key.
     """
 
     permission_classes = [IsStudent]
@@ -514,6 +519,24 @@ class GroupBuyoutView(APIView):
                     {"error": {"code": "INVALID", "message": "A group with a committed trip cannot be bought out."}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            from apps.payments.views import PaymentSerializer
+
+            # Idempotent retry: the same tap delivered twice (double-tap,
+            # retry after a dropped response) must not record the seats
+            # twice. Look this up before the capacity checks so a retry that
+            # arrives after the group filled still resolves to the original
+            # payment instead of an "already taken" error.
+            idempotency_key = str(request.data.get("idempotency_key") or "").strip()
+            if idempotency_key:
+                existing = Payment.objects.filter(
+                    payer=request.user,
+                    idempotency_key=idempotency_key,
+                    group=group,
+                    kind=Payment.Kind.GROUP_BUYOUT,
+                ).first()
+                if existing is not None:
+                    return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
 
             remaining = group.capacity - group.seats_filled
             if remaining <= 0:
@@ -558,23 +581,38 @@ class GroupBuyoutView(APIView):
             charge_seats = seats + (1 if own_seat_pending else 0)
             amount = total_fare(group.fare_per_seat, charge_seats)
 
-            payment = Payment.objects.create(
-                group=group,
-                payer=request.user,
-                amount=amount,
-                currency=request.data.get("currency", "NGN"),
-                seats=seats,
-                kind=Payment.Kind.GROUP_BUYOUT,
-                # Settled on declaration: there is no provider to confirm against.
-                status=Payment.Status.SUCCESSFUL,
-                confirmed_at=timezone.now(),
-            )
+            try:
+                with transaction.atomic():
+                    payment = Payment.objects.create(
+                        group=group,
+                        payer=request.user,
+                        amount=amount,
+                        currency=request.data.get("currency", "NGN"),
+                        seats=seats,
+                        kind=Payment.Kind.GROUP_BUYOUT,
+                        # Settled on declaration: there is no provider to confirm against.
+                        status=Payment.Status.SUCCESSFUL,
+                        confirmed_at=timezone.now(),
+                        idempotency_key=idempotency_key,
+                    )
+            except IntegrityError:
+                # Lost the race with an identical retry delivering at the same
+                # moment (unique payer+key backstop): return the winner instead
+                # of a second commitment. The nested atomic above confines the
+                # rollback to a savepoint so the outer transaction survives.
+                existing = Payment.objects.filter(
+                    payer=request.user,
+                    idempotency_key=idempotency_key,
+                    group=group,
+                    kind=Payment.Kind.GROUP_BUYOUT,
+                ).first()
+                if existing is None:
+                    raise
+                return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
             group.refresh_status()
             # A buyout that covers every remaining seat fills the keke and
             # becomes a ride request for the driver queue right away.
             dispatch_group(group)
-
-        from apps.payments.views import PaymentSerializer
 
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 

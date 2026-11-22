@@ -177,12 +177,19 @@ export class GroupService {
    * The backend prices the seats from the group's own coordinates and treats
    * the server price as authoritative. `amount` is sent for compatibility with
    * endpoints that validate it up front (it is `seats x per-seat fare`); a
-   * server that reprices simply ignores it.
+   * server that reprices simply ignores it. `idempotencyKey` identifies one
+   * user tap: retrying the same tap with the same key returns the original
+   * payment instead of recording the seats twice.
    */
-  async buyOutSeats(groupId: string, seats: number, amount?: number): Promise<void> {
+  async buyOutSeats(groupId: string, seats: number, amount?: number, idempotencyKey?: string): Promise<void> {
     await apiClient.post(
       `/groups/${groupId}/buyout/`,
-      { seats, currency: CURRENCY, ...(amount !== undefined ? { amount } : {}) },
+      {
+        seats,
+        currency: CURRENCY,
+        ...(amount !== undefined ? { amount } : {}),
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      },
       { auth: true },
     )
   }
